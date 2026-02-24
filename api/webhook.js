@@ -39,6 +39,9 @@ module.exports = async (req, res) => {
           const rawToken = crypto.randomBytes(32).toString("hex");
           const tokenHash = sha256(rawToken);
 
+          // 🔹 TEMPORARY LOG FOR TESTING (remove later)
+          console.log("CANCEL_TOKEN_FOR_BOOKING", bookingId, rawToken);
+
           await bookingsTable().update([
             {
               id: rec.id,
@@ -49,16 +52,13 @@ module.exports = async (req, res) => {
               },
             },
           ]);
-
-          // For now we are NOT emailing yet.
-          // We'll email rawToken later; keep it ready by storing it temporarily in logs (optional).
-          // console.log("CANCEL_TOKEN_FOR_BOOKING", bookingId, rawToken);
         }
       }
     }
 
     res.status(200).json({ received: true });
   } catch (err) {
+    console.error("Webhook error:", err.message);
     res.status(400).send(`Webhook Error: ${err.message}`);
   }
 };
