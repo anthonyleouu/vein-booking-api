@@ -1,6 +1,11 @@
 const Stripe = require("stripe");
 const getRawBody = require("raw-body");
+const crypto = require("crypto");
 const { bookingsTable } = require("../lib/airtable");
+
+function sha256(input) {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
 
 module.exports = async (req, res) => {
   try {
@@ -28,15 +33,26 @@ module.exports = async (req, res) => {
           .firstPage();
 
         if (records.length) {
+          const rec = records[0];
+
+          // Create cancel token once
+          const rawToken = crypto.randomBytes(32).toString("hex");
+          const tokenHash = sha256(rawToken);
+
           await bookingsTable().update([
             {
-              id: records[0].id,
+              id: rec.id,
               fields: {
                 status: "CONFIRMED",
-                stripe_payment_intent: session.payment_intent,
+                stripe_payment_intent_id: session.payment_intent,
+                cancel_token_hash: tokenHash,
               },
             },
           ]);
+
+          // For now we are NOT emailing yet.
+          // We'll email rawToken later; keep it ready by storing it temporarily in logs (optional).
+          // console.log("CANCEL_TOKEN_FOR_BOOKING", bookingId, rawToken);
         }
       }
     }
