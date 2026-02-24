@@ -39,9 +39,6 @@ module.exports = async (req, res) => {
           const rawToken = crypto.randomBytes(32).toString("hex");
           const tokenHash = sha256(rawToken);
 
-          // 🔹 TEMPORARY LOG FOR TESTING (remove later)
-          console.log("CANCEL_TOKEN_FOR_BOOKING", bookingId, rawToken);
-
           await bookingsTable().update([
             {
               id: rec.id,
