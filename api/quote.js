@@ -81,22 +81,58 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ---- TRANSFER QUOTE (placeholder pricing for now) ----
+    // ---- TRANSFER QUOTE (Distance Matrix + pricing placeholder) ----
     if (service_type === "TRANSFER") {
-      const { pickup_datetime_iso } = body;
+      const { pickup_datetime_iso, pickup_place_id, dropoff_place_id } = body;
+
       if (!pickup_datetime_iso) return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
+      if (!pickup_place_id) return res.status(400).json({ ok: false, error: "pickup_place_id required" });
+      if (!dropoff_place_id) return res.status(400).json({ ok: false, error: "dropoff_place_id required" });
+
+      const serverKey = process.env.GOOGLE_MAPS_SERVER_KEY;
+      if (!serverKey) return res.status(500).json({ ok: false, error: "Missing GOOGLE_MAPS_SERVER_KEY env var" });
 
       const pickup = new Date(pickup_datetime_iso);
       const night = isNightPickup(pickup, Number(cfg.night_start_hour ?? 0), Number(cfg.night_end_hour ?? 6));
 
-      // For now: just demonstrate night surcharge working
+      // Distance Matrix
+      const origins = `place_id:${pickup_place_id}`;
+      const destinations = `place_id:${dropoff_place_id}`;
+
+      const dmUrl =
+        "https://maps.googleapis.com/maps/api/distancematrix/json" +
+        `?origins=${encodeURIComponent(origins)}` +
+        `&destinations=${encodeURIComponent(destinations)}` +
+        `&mode=driving` +
+        `&units=metric` +
+        `&key=${encodeURIComponent(serverKey)}`;
+
+      const dmRes = await fetch(dmUrl);
+      const dmJson = await dmRes.json();
+
+      if (!dmRes.ok || dmJson.status !== "OK") {
+        return res.status(500).json({ ok: false, error: "Distance Matrix failed", details: dmJson });
+      }
+
+      const element = dmJson?.rows?.[0]?.elements?.[0];
+      if (!element || element.status !== "OK") {
+        return res.status(500).json({ ok: false, error: "No route found", details: dmJson });
+      }
+
+      const distance_m = element.distance.value; // meters
+      const duration_s = element.duration.value; // seconds
+
+      const distance_km = Math.round((distance_m / 1000) * 10) / 10; // 1 decimal
+      const duration_min = Math.round(duration_s / 60);
+
+      // Pricing (still placeholder, but now you have distance_km/duration_min available)
       const base = Number(cfg.transfer_base_fare || 0);
       let total = base;
 
       if (night && cfg.night_type === "PERCENT") total = Math.round(base * (1 + Number(cfg.night_value || 0) / 100));
       if (night && cfg.night_type === "FIXED") total = base + Number(cfg.night_value || 0);
 
-      // For availability demo: assume transfer takes 60 minutes
+      // Availability demo: still 60 minutes
       const start = pickup;
       const end = new Date(start.getTime() + 60 * 60 * 1000);
       const blockStart = new Date(start.getTime() - Number(cfg.transfer_buffer_before_min || 0) * 60 * 1000);
@@ -112,8 +148,15 @@ module.exports = async (req, res) => {
         available: true,
         vehicle: "Mercedes V-Class",
         is_night: night,
+        distance_km,
+        duration_min,
         price_total_eur: total,
-        price_breakdown: { base_fare: base, night_applied: night, night_type: cfg.night_type, night_value: cfg.night_value },
+        price_breakdown: {
+          base_fare: base,
+          night_applied: night,
+          night_type: cfg.night_type,
+          night_value: cfg.night_value,
+        },
       });
     }
 
