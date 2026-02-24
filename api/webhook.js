@@ -2,6 +2,7 @@ const Stripe = require("stripe");
 const getRawBody = require("raw-body");
 const crypto = require("crypto");
 const { bookingsTable } = require("../lib/airtable");
+const { sendBookingEmails } = require("../lib/email");
 
 function sha256(input) {
   return crypto.createHash("sha256").update(input).digest("hex");
@@ -34,8 +35,9 @@ module.exports = async (req, res) => {
 
         if (records.length) {
           const rec = records[0];
+          const f = rec.fields;
 
-          // Create cancel token once
+          // Generate cancel token (raw) + store only hash
           const rawToken = crypto.randomBytes(32).toString("hex");
           const tokenHash = sha256(rawToken);
 
@@ -49,6 +51,43 @@ module.exports = async (req, res) => {
               },
             },
           ]);
+
+          // Build cancel link
+          const cancelBase =
+            process.env.CANCEL_LINK_BASE ||
+            "https://vein-booking-api.vercel.app/api/cancel";
+          const cancelLink = `${cancelBase}?token=${rawToken}`;
+
+          // Email content
+          const subject = `Booking Confirmed (${bookingId})`;
+
+          const text =
+            `Your booking is confirmed ✅\n\n` +
+            `Booking ID: ${bookingId}\n` +
+            `Service: ${f.service_type || ""}\n` +
+            `Start: ${f.start_time || ""}\n` +
+            `Price: €${f.price_total_eur || ""}\n\n` +
+            `Cancellation (not allowed within 24h of start):\n${cancelLink}\n`;
+
+          const html = `
+            <div style="font-family:Arial,sans-serif;line-height:1.4">
+              <h2>Booking Confirmed ✅</h2>
+              <p><b>Booking ID:</b> ${bookingId}</p>
+              <p><b>Service:</b> ${f.service_type || ""}</p>
+              <p><b>Start:</b> ${f.start_time || ""}</p>
+              <p><b>Price:</b> €${f.price_total_eur || ""}</p>
+              <p><b>Cancellation:</b> Not allowed within 24 hours of start time.</p>
+              <p><a href="${cancelLink}">Cancel booking</a></p>
+            </div>
+          `;
+
+          // Send emails: customer (if present) + admin copy always
+          await sendBookingEmails({
+            toCustomer: f.customer_email || null,
+            subject,
+            html,
+            text,
+          });
         }
       }
     }
