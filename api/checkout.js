@@ -2,8 +2,32 @@ const Stripe = require("stripe");
 const { bookingsTable } = require("../lib/airtable");
 
 module.exports = async (req, res) => {
+  // ---- CORS (Webflow -> Vercel) ----
+  const allowedOrigins = [
+    "https://vip-athens-transfer.webflow.io",
+    // add later:
+    // "https://vip-athens-transfer.webflow.io",
+    // "https://veindigital.co",
+  ];
+
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // Preflight
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   try {
-    if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
+    if (req.method !== "POST") {
+      return res.status(405).json({ ok: false, error: "POST only" });
+    }
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     const { hold_booking_id } = body;
@@ -36,9 +60,11 @@ module.exports = async (req, res) => {
     const amount = Math.round(Number(f.price_total_eur || 0) * 100);
     if (!amount || amount < 50) return res.status(400).json({ ok: false, error: "Invalid amount" });
 
-    // ✅ your Webflow pages
-    const successUrl = process.env.SUCCESS_URL || "https://vip-athens-transfer.webflow.io/successful-book";
-    const cancelUrl = process.env.CANCEL_URL || "https://vip-athens-transfer.webflow.io/failed-book";
+    // Your real Webflow pages (you gave these)
+    const successUrl =
+      process.env.SUCCESS_URL || "https://vip-athens-transfer.webflow.io/successful-book";
+    const cancelUrl =
+      process.env.CANCEL_URL || "https://vip-athens-transfer.webflow.io/failed-book";
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -62,17 +88,20 @@ module.exports = async (req, res) => {
       },
     });
 
+    // Save session id (optional)
     await bookingsTable().update([
       {
         id: booking.id,
-        fields: {
-          stripe_session_id: session.id,
-        },
+        fields: { stripe_session_id: session.id },
       },
     ]);
 
-    // ✅ IMPORTANT: return `url` because your frontend expects `checkout.url`
-    return res.status(200).json({ ok: true, url: session.url });
+    // ✅ Return BOTH keys for compatibility (your front-end expects `url`)
+    return res.status(200).json({
+      ok: true,
+      url: session.url,
+      checkout_url: session.url,
+    });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
