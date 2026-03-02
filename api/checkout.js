@@ -36,9 +36,9 @@ module.exports = async (req, res) => {
     const amount = Math.round(Number(f.price_total_eur || 0) * 100);
     if (!amount || amount < 50) return res.status(400).json({ ok: false, error: "Invalid amount" });
 
-    // These can be placeholder Webflow pages for now
-    const successUrl = process.env.SUCCESS_URL || "https://example.com/success";
-    const cancelUrl = process.env.CANCEL_URL || "https://example.com/cancel";
+    // ✅ your Webflow pages
+    const successUrl = process.env.SUCCESS_URL || "https://vip-athens-transfer.webflow.io/successful-book";
+    const cancelUrl = process.env.CANCEL_URL || "https://vip-athens-transfer.webflow.io/failed-book";
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -62,7 +62,6 @@ module.exports = async (req, res) => {
       },
     });
 
-    // Save session id in Airtable (optional but useful)
     await bookingsTable().update([
       {
         id: booking.id,
@@ -72,7 +71,8 @@ module.exports = async (req, res) => {
       },
     ]);
 
-    return res.status(200).json({ ok: true, checkout_url: session.url });
+    // ✅ IMPORTANT: return `url` because your frontend expects `checkout.url`
+    return res.status(200).json({ ok: true, url: session.url });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }

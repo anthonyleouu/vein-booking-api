@@ -9,21 +9,46 @@ function sha256(input) {
 }
 
 module.exports = async (req, res) => {
+  // Stripe webhooks are POST only
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST") return res.status(405).send("POST only");
+
   try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).send("Missing STRIPE_SECRET_KEY");
+    }
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      return res.status(500).send("Missing STRIPE_WEBHOOK_SECRET");
+    }
+
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-    const buf = await getRawBody(req);
     const sig = req.headers["stripe-signature"];
+    if (!sig) {
+      return res.status(400).send("Missing stripe-signature header");
+    }
 
-    const event = stripe.webhooks.constructEvent(
-      buf,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
+    // raw-body reads the request stream (required for signature verification)
+    const buf = await getRawBody(req);
+
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        buf,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      console.error("Webhook signature error:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      const bookingId = session.metadata.booking_id;
+
+      const bookingId =
+        (session.metadata && session.metadata.booking_id) ||
+        session.client_reference_id;
 
       if (bookingId) {
         const records = await bookingsTable()
@@ -46,7 +71,7 @@ module.exports = async (req, res) => {
               id: rec.id,
               fields: {
                 status: "CONFIRMED",
-                stripe_payment_intent_id: session.payment_intent,
+                stripe_payment_intent_id: session.payment_intent || "",
                 cancel_token_hash: tokenHash,
               },
             },
@@ -58,7 +83,6 @@ module.exports = async (req, res) => {
             "https://vein-booking-api.vercel.app/api/cancel";
           const cancelLink = `${cancelBase}?token=${rawToken}`;
 
-          // Email content
           const subject = `Booking Confirmed (${bookingId})`;
 
           const text =
@@ -81,7 +105,6 @@ module.exports = async (req, res) => {
             </div>
           `;
 
-          // Send emails: customer (if present) + admin copy always
           await sendBookingEmails({
             toCustomer: f.customer_email || null,
             subject,
@@ -92,9 +115,9 @@ module.exports = async (req, res) => {
       }
     }
 
-    res.status(200).json({ received: true });
+    return res.status(200).json({ received: true });
   } catch (err) {
-    console.error("Webhook error:", err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
+    console.error("Webhook error:", err);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 };
