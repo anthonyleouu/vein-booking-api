@@ -5,18 +5,6 @@ const { tourPrice, isNightPickup } = require("../lib/pricing");
 
 module.exports = async (req, res) => {
   try {
-    // ---- CORS (Webflow -> Vercel) ----
-    const allowedOrigins = [
-      "https://vip-athens-transfer.webflow.io",
-      // add custom domain later
-    ];
-    const origin = req.headers.origin;
-    if (allowedOrigins.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    if (req.method === "OPTIONS") return res.status(204).end();
-
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
@@ -24,7 +12,7 @@ module.exports = async (req, res) => {
     if (!service_type) return res.status(400).json({ ok: false, error: "service_type required" });
 
     // Load Config (single row)
-    const cfgRows = await configTable().select({ maxRecords: 1, view: "Grid view" }).firstPage();
+    const cfgRows = await configTable().select({ maxRecords: 1 }).firstPage();
     if (!cfgRows.length) return res.status(500).json({ ok: false, error: "Config row missing" });
     const cfg = cfgRows[0].fields;
 
@@ -39,9 +27,13 @@ module.exports = async (req, res) => {
         passengers,
         extra_hours,
         pickup_datetime_iso,
+
+        // accept either naming style
         customer_name,
         customer_email,
         customer_phone,
+        customer_first_name,
+        customer_last_name,
       } = body;
 
       if (!tour_id) return res.status(400).json({ ok: false, error: "tour_id required" });
@@ -63,9 +55,15 @@ module.exports = async (req, res) => {
       const blockEnd = new Date(end.getTime() + Number(tour.buffer_after_min || 0) * 60 * 1000);
 
       const conflicts = await findConflicts(blockStart.toISOString(), blockEnd.toISOString());
-      if (conflicts.length) return res.status(200).json({ ok: true, available: false, message: "No Vehicles Available" });
+      if (conflicts.length) {
+        return res.status(200).json({ ok: true, available: false, message: "No Vehicles Available" });
+      }
 
       const bookingId = crypto.randomUUID();
+
+      const nameCombined =
+        (customer_name && String(customer_name).trim()) ||
+        `${(customer_first_name || "").trim()} ${(customer_last_name || "").trim()}`.trim();
 
       await bookingsTable().create([
         {
@@ -82,7 +80,8 @@ module.exports = async (req, res) => {
             created_at: now.toISOString(),
             expires_at: expiresAt.toISOString(),
 
-            customer_name: customer_name || "",
+            // ✅ use existing Airtable fields
+            customer_name: nameCombined || "",
             customer_email: customer_email || "",
             customer_phone: customer_phone || "",
 
@@ -108,19 +107,14 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ---------------- TRANSFER HOLD (FULL FIELDS) ----------------
+    // ---------------- TRANSFER HOLD ----------------
     if (service_type === "TRANSFER") {
       const {
         pickup_datetime_iso,
-
         pickup_place_id,
         dropoff_place_id,
-        pickup_address,
-        dropoff_address,
-
         distance_km,
         duration_min,
-
         vehicle,
         passengers,
         luggage,
@@ -130,38 +124,36 @@ module.exports = async (req, res) => {
         customer_email,
         customer_phone,
 
-        arrival, // { flight_number, vessel_name }
+        arrival,
       } = body;
 
       if (!pickup_datetime_iso) return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
-      if (!pickup_place_id) return res.status(400).json({ ok: false, error: "pickup_place_id required" });
-      if (!dropoff_place_id) return res.status(400).json({ ok: false, error: "dropoff_place_id required" });
 
-      const start = new Date(pickup_datetime_iso);
+      const pickup = new Date(pickup_datetime_iso);
+      const night = isNightPickup(pickup, Number(cfg.night_start_hour ?? 0), Number(cfg.night_end_hour ?? 6));
 
-      const night = isNightPickup(
-        start,
-        Number(cfg.night_start_hour ?? 0),
-        Number(cfg.night_end_hour ?? 6)
-      );
-
-      // Use duration_min if provided (from quote). Fallback to 60.
-      const durMin = Number(duration_min || 60);
-      const end = new Date(start.getTime() + durMin * 60 * 1000);
-
-      const blockStart = new Date(start.getTime() - Number(cfg.transfer_buffer_before_min || 0) * 60 * 1000);
-      const blockEnd = new Date(end.getTime() + Number(cfg.transfer_buffer_after_min || 0) * 60 * 1000);
-
-      const conflicts = await findConflicts(blockStart.toISOString(), blockEnd.toISOString());
-      if (conflicts.length) return res.status(200).json({ ok: true, available: false, message: "No Vehicles Available" });
-
-      // Pricing: keep your current placeholder (base + night modifier)
+      // temporary pricing (your quote.js handles better; this keeps hold consistent if needed)
       const base = Number(cfg.transfer_base_fare || 0);
       let total = base;
       if (night && cfg.night_type === "PERCENT") total = Math.round(base * (1 + Number(cfg.night_value || 0) / 100));
       if (night && cfg.night_type === "FIXED") total = base + Number(cfg.night_value || 0);
 
-      // Arrival mapping -> Airtable fields you already have
+      // temporary duration: 60 minutes
+      const start = pickup;
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      const blockStart = new Date(start.getTime() - Number(cfg.transfer_buffer_before_min || 0) * 60 * 1000);
+      const blockEnd = new Date(end.getTime() + Number(cfg.transfer_buffer_after_min || 0) * 60 * 1000);
+
+      const conflicts = await findConflicts(blockStart.toISOString(), blockEnd.toISOString());
+      if (conflicts.length) {
+        return res.status(200).json({ ok: true, available: false, message: "No Vehicles Available" });
+      }
+
+      const bookingId = crypto.randomUUID();
+
+      const nameCombined = `${(customer_first_name || "").trim()} ${(customer_last_name || "").trim()}`.trim();
+
+      // Arrival mapping -> your Airtable fields: arrival_type + arrival_reference
       const flight = (arrival?.flight_number || "").trim();
       const vessel = (arrival?.vessel_name || "").trim();
 
@@ -171,15 +163,9 @@ module.exports = async (req, res) => {
         arrival_type = "FLIGHT";
         arrival_reference = flight;
       } else if (vessel) {
-        arrival_type = "BOAT";
+        arrival_type = "SHIP";
         arrival_reference = vessel;
       }
-
-      const fn = (customer_first_name || "").trim();
-      const ln = (customer_last_name || "").trim();
-      const customer_name = `${fn} ${ln}`.trim();
-
-      const bookingId = crypto.randomUUID();
 
       await bookingsTable().create([
         {
@@ -196,42 +182,30 @@ module.exports = async (req, res) => {
             created_at: now.toISOString(),
             expires_at: expiresAt.toISOString(),
 
-            // Contact
-            customer_name: customer_name,
-            customer_first_name: fn,
-            customer_last_name: ln,
-            customer_email: (customer_email || "").trim(),
-            customer_phone: (customer_phone || "").trim(),
+            // ✅ IMPORTANT: these MUST match your Airtable column headers
+            customer_name: nameCombined || "",
+            customer_email: customer_email || "",
+            customer_phone: customer_phone || "",
 
-            // Route
+            // optional info (only if these columns exist in Airtable)
             pickup_place_id: pickup_place_id || "",
             dropoff_place_id: dropoff_place_id || "",
-            pickup_address: (pickup_address || "").trim(),
-            dropoff_address: (dropoff_address || "").trim(),
-
-            // Metrics
-            distance_km: distance_km != null ? Number(distance_km) : null,
-            duration_min: durMin,
-
-            // Options
-            vehicle: (vehicle || "vclass").trim(),
+            distance_km: typeof distance_km === "number" ? distance_km : Number(distance_km || 0) || 0,
+            duration_min: typeof duration_min === "number" ? duration_min : Number(duration_min || 0) || 0,
+            vehicle: vehicle || "vclass",
             passengers: Number(passengers || 0),
             luggage: Number(luggage || 0),
+
+            arrival_type,
+            arrival_reference,
+
             is_night: night ? true : false,
-
-            // Arrival
-            arrival_type: arrival_type,
-            arrival_reference: arrival_reference,
-
-            // Price
             price_total_eur: total,
             price_breakdown_json: JSON.stringify({
               base_fare: base,
               night_applied: night,
               night_type: cfg.night_type,
               night_value: cfg.night_value,
-              distance_km: distance_km != null ? Number(distance_km) : null,
-              duration_min: durMin,
             }),
           },
         },
