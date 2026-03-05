@@ -192,7 +192,7 @@ module.exports = async (req, res) => {
         if (nightType === "FIXED") total = subtotal + nightValue;
       }
 
-      total = Math.round(total * 100) / 100;
+      total = Math.floor(total);
 
       // Availability demo: still 60 minutes (same as your current logic)
       const start = pickup;
