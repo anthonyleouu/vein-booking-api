@@ -4,6 +4,26 @@ const { findConflicts } = require("../lib/availability");
 const { tourPrice, isNightPickup } = require("../lib/pricing");
 
 module.exports = async (req, res) => {
+  
+  // ---- CORS (Webflow -> Vercel) ----
+const allowedOrigins = [
+  "https://vip-athens-transfer.webflow.io",
+  // "https://veindigital.co",
+];
+
+const origin = req.headers.origin;
+if (allowedOrigins.includes(origin)) {
+  res.setHeader("Access-Control-Allow-Origin", origin);
+}
+res.setHeader("Vary", "Origin");
+res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+// Preflight
+if (req.method === "OPTIONS") {
+  return res.status(204).end();
+}
+  
   try {
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
 
