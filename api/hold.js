@@ -4,26 +4,25 @@ const { findConflicts } = require("../lib/availability");
 const { tourPrice, isNightPickup } = require("../lib/pricing");
 
 module.exports = async (req, res) => {
-  
   // ---- CORS (Webflow -> Vercel) ----
-const allowedOrigins = [
-  "https://vip-athens-transfer.webflow.io",
-  // "https://veindigital.co",
-];
+  const allowedOrigins = [
+    "https://vip-athens-transfer.webflow.io",
+    // "https://veindigital.co",
+  ];
 
-const origin = req.headers.origin;
-if (allowedOrigins.includes(origin)) {
-  res.setHeader("Access-Control-Allow-Origin", origin);
-}
-res.setHeader("Vary", "Origin");
-res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-// Preflight
-if (req.method === "OPTIONS") {
-  return res.status(204).end();
-}
-  
+  // Preflight
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   try {
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
 
@@ -31,12 +30,14 @@ if (req.method === "OPTIONS") {
     const { service_type } = body;
     if (!service_type) return res.status(400).json({ ok: false, error: "service_type required" });
 
-    // Load Config (single row)
-    const cfgRows = await configTable().select({ maxRecords: 1 }).firstPage();
-    if (!cfgRows.length) return res.status(500).json({ ok: false, error: "Config row missing" });
-    const cfg = cfgRows[0].fields;
+    // Load GLOBAL config (explicit)
+    const globalRows = await configTable()
+      .select({ maxRecords: 1, filterByFormula: `{key}='GLOBAL'` })
+      .firstPage();
+    if (!globalRows.length) return res.status(500).json({ ok: false, error: "Config row GLOBAL missing" });
+    const globalCfg = globalRows[0].fields;
 
-    const holdMins = Number(cfg.hold_expiry_minutes || 15);
+    const holdMins = Number(globalCfg.hold_expiry_minutes || 15);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + holdMins * 60 * 1000);
 
@@ -149,20 +150,62 @@ if (req.method === "OPTIONS") {
 
       if (!pickup_datetime_iso) return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
 
+      // determine vehicle key (default vclass)
+      const vehicleKey = (vehicle || "vclass").toString().trim() || "vclass";
+
+      // load vehicle config row
+      const vehicleRows = await configTable()
+        .select({ maxRecords: 1, filterByFormula: `{key}='${vehicleKey}'` })
+        .firstPage();
+      if (!vehicleRows.length) return res.status(500).json({ ok: false, error: `Config row ${vehicleKey} missing` });
+      const vcfg = vehicleRows[0].fields;
+
       const pickup = new Date(pickup_datetime_iso);
-      const night = isNightPickup(pickup, Number(cfg.night_start_hour ?? 0), Number(cfg.night_end_hour ?? 6));
 
-      // temporary pricing (your quote.js handles better; this keeps hold consistent if needed)
-      const base = Number(cfg.transfer_base_fare || 0);
-      let total = base;
-      if (night && cfg.night_type === "PERCENT") total = Math.round(base * (1 + Number(cfg.night_value || 0) / 100));
-      if (night && cfg.night_type === "FIXED") total = base + Number(cfg.night_value || 0);
+      // night hours from GLOBAL if available, else from vehicle row
+      const nightStart = Number(globalCfg.night_start_hour ?? vcfg.night_start_hour ?? 0);
+      const nightEnd = Number(globalCfg.night_end_hour ?? vcfg.night_end_hour ?? 6);
+      const night = isNightPickup(pickup, nightStart, nightEnd);
 
-      // temporary duration: 60 minutes
+      // Use passed distance/duration from quote
+      const distKm =
+        typeof distance_km === "number" ? distance_km : Number(distance_km || 0) || 0;
+      const durMin =
+        typeof duration_min === "number" ? duration_min : Number(duration_min || 0) || 0;
+
+      // Pricing from VEHICLE row using your Airtable field names
+      const base = Number(vcfg.transfer_base_fare || 0);
+      const rate = Number(vcfg.transfer_rate_per_km || 0);
+      const freeKm = Number(vcfg.transfer_free_km || 0);
+      const minFare = Number(vcfg.transfer_minimum_fare || 0);
+
+      const extraKm = Math.max(0, distKm - freeKm);
+      const distanceCost = extraKm * rate;
+
+      let subtotal = base + distanceCost;
+      if (minFare > 0) subtotal = Math.max(minFare, subtotal);
+
+      let total = subtotal;
+
+      const nightType = vcfg.night_type ?? globalCfg.night_type;
+      const nightValue = Number((vcfg.night_value ?? globalCfg.night_value) || 0);
+
+      if (night) {
+        if (nightType === "PERCENT") total = subtotal * (1 + nightValue / 100);
+        if (nightType === "FIXED") total = subtotal + nightValue;
+      }
+
+      total = Math.round(total * 100) / 100;
+
+      // temporary duration: 60 minutes (kept same as your existing logic)
       const start = pickup;
       const end = new Date(start.getTime() + 60 * 60 * 1000);
-      const blockStart = new Date(start.getTime() - Number(cfg.transfer_buffer_before_min || 0) * 60 * 1000);
-      const blockEnd = new Date(end.getTime() + Number(cfg.transfer_buffer_after_min || 0) * 60 * 1000);
+
+      const bufferBefore = Number(globalCfg.transfer_buffer_before_min || 0);
+      const bufferAfter = Number(globalCfg.transfer_buffer_after_min || 0);
+
+      const blockStart = new Date(start.getTime() - bufferBefore * 60 * 1000);
+      const blockEnd = new Date(end.getTime() + bufferAfter * 60 * 1000);
 
       const conflicts = await findConflicts(blockStart.toISOString(), blockEnd.toISOString());
       if (conflicts.length) {
@@ -207,12 +250,11 @@ if (req.method === "OPTIONS") {
             customer_email: customer_email || "",
             customer_phone: customer_phone || "",
 
-            // optional info (only if these columns exist in Airtable)
             pickup_place_id: pickup_place_id || "",
             dropoff_place_id: dropoff_place_id || "",
-            distance_km: typeof distance_km === "number" ? distance_km : Number(distance_km || 0) || 0,
-            duration_min: typeof duration_min === "number" ? duration_min : Number(duration_min || 0) || 0,
-            vehicle: vehicle || "vclass",
+            distance_km: distKm,
+            duration_min: durMin,
+            vehicle: vehicleKey,
             passengers: Number(passengers || 0),
             luggage: Number(luggage || 0),
 
@@ -223,9 +265,15 @@ if (req.method === "OPTIONS") {
             price_total_eur: total,
             price_breakdown_json: JSON.stringify({
               base_fare: base,
+              free_km: freeKm,
+              extra_km: Math.round(extraKm * 10) / 10,
+              rate_per_km: rate,
+              distance_cost: Math.round(distanceCost * 100) / 100,
+              minimum_fare: minFare,
               night_applied: night,
-              night_type: cfg.night_type,
-              night_value: cfg.night_value,
+              night_type: nightType,
+              night_value: nightValue,
+              subtotal: Math.round(subtotal * 100) / 100,
             }),
           },
         },
