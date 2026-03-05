@@ -6,8 +6,8 @@ module.exports = async (req, res) => {
   // ---- CORS (Webflow -> Vercel) ----
   const allowedOrigins = [
     "https://vip-athens-transfer.webflow.io",
-    // add your custom domain later, e.g.
-    // "https://veindigital.co"
+    "https://veindigital.co",
+    "https://www.veindigital.co",
   ];
 
   const origin = req.headers.origin;
@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
   }
 
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   // Preflight
@@ -24,26 +24,20 @@ module.exports = async (req, res) => {
     return res.status(204).end();
   }
 
-// ---- CORS (Webflow -> Vercel) ----
-const allowedOrigins = [
-  "https://vip-athens-transfer.webflow.io",
-  // "https://veindigital.co",
-];
-
-const origin = req.headers.origin;
-if (allowedOrigins.includes(origin)) {
-  res.setHeader("Access-Control-Allow-Origin", origin);
-}
-res.setHeader("Vary", "Origin");
-res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-// Preflight
-if (req.method === "OPTIONS") {
-  return res.status(204).end();
-}
-
   try {
+    // ✅ quick sanity output if you open in browser
+    if (req.method === "GET") {
+      return res.status(200).json({
+        ok: true,
+        message: "quote endpoint reachable (use POST)",
+        env: {
+          has_AIRTABLE_API_KEY: !!process.env.AIRTABLE_API_KEY,
+          has_AIRTABLE_BASE_ID: !!process.env.AIRTABLE_BASE_ID,
+          has_GOOGLE_MAPS_SERVER_KEY: !!process.env.GOOGLE_MAPS_SERVER_KEY,
+        },
+      });
+    }
+
     if (req.method !== "POST") {
       return res.status(405).json({ ok: false, error: "POST only" });
     }
@@ -181,6 +175,11 @@ if (req.method === "OPTIONS") {
 
     return res.status(400).json({ ok: false, error: "Unknown service_type" });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+      name: err.name,
+      stack: err.stack,
+    });
   }
 };
