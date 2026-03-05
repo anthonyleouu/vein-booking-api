@@ -31,6 +31,7 @@ module.exports = async (req, res) => {
         ok: true,
         message: "quote endpoint reachable (use POST)",
         env: {
+          has_AIRTABLE_TOKEN: !!process.env.AIRTABLE_TOKEN,
           has_AIRTABLE_API_KEY: !!process.env.AIRTABLE_API_KEY,
           has_AIRTABLE_BASE_ID: !!process.env.AIRTABLE_BASE_ID,
           has_GOOGLE_MAPS_SERVER_KEY: !!process.env.GOOGLE_MAPS_SERVER_KEY,
@@ -47,13 +48,16 @@ module.exports = async (req, res) => {
     const { service_type } = body;
     if (!service_type) return res.status(400).json({ ok: false, error: "service_type required" });
 
-    // Load Config (single row)
-    const cfgRows = await configTable().select({ maxRecords: 1, view: "Grid view" }).firstPage();
-    if (!cfgRows.length) return res.status(500).json({ ok: false, error: "Config row missing" });
-    const cfg = cfgRows[0].fields;
-
-    // ---- TOUR QUOTE ----
+    // ---------------- TOUR QUOTE ----------------
     if (service_type === "TOUR") {
+      // Load GLOBAL config (for hold/availability windows etc.)
+      const cfgRows = await configTable()
+        .select({ maxRecords: 1, filterByFormula: `{key}='GLOBAL'` })
+        .firstPage();
+
+      if (!cfgRows.length) return res.status(500).json({ ok: false, error: "Config row GLOBAL missing" });
+      const cfg = cfgRows[0].fields;
+
       const { tour_id, passengers, extra_hours, pickup_datetime_iso } = body;
       if (!tour_id) return res.status(400).json({ ok: false, error: "tour_id required" });
       if (!pickup_datetime_iso) return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
@@ -94,7 +98,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ---- TRANSFER QUOTE (Distance Matrix + pricing placeholder) ----
+    // ---------------- TRANSFER QUOTE ----------------
     if (service_type === "TRANSFER") {
       const { pickup_datetime_iso, pickup_place_id, dropoff_place_id } = body;
 
@@ -105,8 +109,36 @@ module.exports = async (req, res) => {
       const serverKey = process.env.GOOGLE_MAPS_SERVER_KEY;
       if (!serverKey) return res.status(500).json({ ok: false, error: "Missing GOOGLE_MAPS_SERVER_KEY env var" });
 
+      // ✅ Since quote happens before vehicle selection, default vehicle is vclass
+      const vehicleKey = "vclass";
+
+      // Load GLOBAL + VEHICLE config rows
+      const cfgRows = await configTable()
+        .select({
+          filterByFormula: `OR({key}='GLOBAL',{key}='${vehicleKey}')`,
+        })
+        .firstPage();
+
+      const globalRow = cfgRows.find((r) => r.fields?.key === "GLOBAL");
+      const vehicleRow = cfgRows.find((r) => r.fields?.key === vehicleKey);
+
+      if (!globalRow) return res.status(500).json({ ok: false, error: "Config row GLOBAL missing" });
+      if (!vehicleRow) return res.status(500).json({ ok: false, error: `Config row ${vehicleKey} missing` });
+
+      const globalCfg = globalRow.fields;
+      const vcfg = vehicleRow.fields;
+
       const pickup = new Date(pickup_datetime_iso);
-      const night = isNightPickup(pickup, Number(cfg.night_start_hour ?? 0), Number(cfg.night_end_hour ?? 6));
+
+      // night hours come from GLOBAL if set, otherwise fallback to vehicle row
+      const nightStart = Number(
+        (globalCfg.night_start_hour ?? vcfg.night_start_hour ?? 0)
+      );
+      const nightEnd = Number(
+        (globalCfg.night_end_hour ?? vcfg.night_end_hour ?? 6)
+      );
+
+      const night = isNightPickup(pickup, nightStart, nightEnd);
 
       // Distance Matrix
       const origins = `place_id:${pickup_place_id}`;
@@ -138,18 +170,39 @@ module.exports = async (req, res) => {
       const distance_km = Math.round((distance_m / 1000) * 10) / 10; // 1 decimal
       const duration_min = Math.round(duration_s / 60);
 
-      // Pricing (still placeholder, but now you have distance_km/duration_min available)
-      const base = Number(cfg.transfer_base_fare || 0);
-      let total = base;
+      // ✅ Pricing from VEHICLE row using your Airtable field names
+      const base = Number(vcfg.transfer_base_fare || 0);
+      const rate = Number(vcfg.transfer_rate_per_km || 0);
+      const freeKm = Number(vcfg.transfer_free_km || 0);
+      const minFare = Number(vcfg.transfer_minimum_fare || 0);
 
-      if (night && cfg.night_type === "PERCENT") total = Math.round(base * (1 + Number(cfg.night_value || 0) / 100));
-      if (night && cfg.night_type === "FIXED") total = base + Number(cfg.night_value || 0);
+      const extraKm = Math.max(0, distance_km - freeKm);
+      const distanceCost = extraKm * rate;
 
-      // Availability demo: still 60 minutes
+      let subtotal = base + distanceCost;
+      if (minFare > 0) subtotal = Math.max(minFare, subtotal);
+
+      let total = subtotal;
+
+      const nightType = vcfg.night_type ?? globalCfg.night_type;
+      const nightValue = Number((vcfg.night_value ?? globalCfg.night_value) || 0);
+
+      if (night) {
+        if (nightType === "PERCENT") total = subtotal * (1 + nightValue / 100);
+        if (nightType === "FIXED") total = subtotal + nightValue;
+      }
+
+      total = Math.round(total * 100) / 100;
+
+      // Availability demo: still 60 minutes (same as your current logic)
       const start = pickup;
       const end = new Date(start.getTime() + 60 * 60 * 1000);
-      const blockStart = new Date(start.getTime() - Number(cfg.transfer_buffer_before_min || 0) * 60 * 1000);
-      const blockEnd = new Date(end.getTime() + Number(cfg.transfer_buffer_after_min || 0) * 60 * 1000);
+
+      const bufferBefore = Number(globalCfg.transfer_buffer_before_min ?? 0);
+      const bufferAfter = Number(globalCfg.transfer_buffer_after_min ?? 0);
+
+      const blockStart = new Date(start.getTime() - bufferBefore * 60 * 1000);
+      const blockEnd = new Date(end.getTime() + bufferAfter * 60 * 1000);
 
       const conflicts = await findConflicts(blockStart.toISOString(), blockEnd.toISOString());
       if (conflicts.length) {
@@ -160,15 +213,22 @@ module.exports = async (req, res) => {
         ok: true,
         available: true,
         vehicle: "Mercedes V-Class",
+        vehicle_key: vehicleKey,
         is_night: night,
         distance_km,
         duration_min,
         price_total_eur: total,
         price_breakdown: {
           base_fare: base,
+          free_km: freeKm,
+          extra_km: Math.round(extraKm * 10) / 10,
+          rate_per_km: rate,
+          distance_cost: Math.round(distanceCost * 100) / 100,
+          minimum_fare: minFare,
           night_applied: night,
-          night_type: cfg.night_type,
-          night_value: cfg.night_value,
+          night_type: nightType,
+          night_value: nightValue,
+          subtotal: Math.round(subtotal * 100) / 100,
         },
       });
     }
