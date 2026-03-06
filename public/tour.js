@@ -104,27 +104,29 @@ document.addEventListener("DOMContentLoaded", function () {
   window.showTourStep = showTourStep;
 
   function bindTourCards() {
-    document.querySelectorAll("[data-tour-card]").forEach((card) => {
-      card.style.cursor = "pointer";
+  document.querySelectorAll("[data-tour-select]").forEach((btn) => {
+    btn.style.cursor = "pointer";
 
-      card.addEventListener("click", function (e) {
-        e.preventDefault();
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
 
-        const st = ensureTourState();
-        st.tour.tour_id = card.getAttribute("data-tour-id") || "";
-        st.tour.tour_name = card.getAttribute("data-tour-name") || "";
-        st.tour.duration = card.getAttribute("data-tour-duration") || "";
+      const st = ensureTourState();
 
-        document.querySelectorAll("[data-tour-card]").forEach((c) => {
-          c.classList.remove("is-selected");
-        });
+      st.tour.tour_id = btn.getAttribute("data-tour-id") || "";
+      st.tour.tour_name = btn.getAttribute("data-tour-name") || "";
+      st.tour.duration = btn.getAttribute("data-tour-duration") || "";
 
-        card.classList.add("is-selected");
-
-        showTourStep(2);
+      document.querySelectorAll("[data-tour-select]").forEach((b) => {
+        b.classList.remove("is-selected");
       });
+
+      btn.classList.add("is-selected");
+
+      showTourStep(2);
     });
-  }
+  });
+}
 
   function wireTourStepIndicatorClicks() {
     document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
