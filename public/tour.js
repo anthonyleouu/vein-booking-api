@@ -687,6 +687,21 @@ document.addEventListener("DOMContentLoaded", function () {
   st.tour.dropoff_mode = dropoffDefault?.checked ? "same_as_pickup" : (st.tour.dropoff_mode || "same_as_pickup");
 }
 
+function setDefaultTourRadios() {
+
+  const pickupDefault = document.querySelector('[data-tour-pickup-mode="athens_center"]');
+  const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="same_as_pickup"]');
+
+  if (pickupDefault && !document.querySelector('[data-tour-pickup-mode]:checked')) {
+    pickupDefault.checked = true;
+  }
+
+  if (dropoffDefault && !document.querySelector('[data-tour-dropoff-mode]:checked')) {
+    dropoffDefault.checked = true;
+  }
+
+}
+
   function initTourPhoneInputOnce() {
     const phoneInput = document.getElementById("tour_contact_phone");
     if (!phoneInput) return;
@@ -715,10 +730,9 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  ensureTourState();
-  applyTourDefaultRadios();
-  bindTourCards();
-  wireTourStepIndicatorClicks();
-  syncTourModeVisibility();
-  showTourStep(1);
+ensureTourState();
+setDefaultTourRadios();
+bindTourCards();
+syncTourModeVisibility();
+showTourStep(1);
 });
