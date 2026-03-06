@@ -233,6 +233,16 @@ document.addEventListener("DOMContentLoaded", function () {
       st.tour.dropoff_place_id = st.tour.pickup_place_id || "";
       st.tour.dropoff_address = st.tour.pickup_address || "";
     }
+      const flightWrap = document.querySelector('[data-tour-visible="flight-field"]');
+  const shipWrap = document.querySelector('[data-tour-visible="ship-field"]');
+
+  if (flightWrap) {
+    flightWrap.style.display = st.tour.pickup_mode === "airport" ? "block" : "none";
+  }
+
+  if (shipWrap) {
+    shipWrap.style.display = st.tour.pickup_mode === "piraeus_port" ? "block" : "none";
+  }
   }
 
   document.querySelectorAll("[data-tour-pickup-mode]").forEach((input) => {
@@ -412,6 +422,10 @@ document.addEventListener("DOMContentLoaded", function () {
       customer_last_name: st.tourContact.last_name || "",
       customer_email: st.tourContact.email || "",
       customer_phone: st.tourContact.phone || "",
+      arrival: {
+  flight_number: st.tour.arrival?.flight_number || "",
+  vessel_name: st.tour.arrival?.vessel_name || ""
+},
     };
 
     const res = await fetch(TOUR_HOLD_ENDPOINT, {
@@ -484,6 +498,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const tourEmailEl = document.querySelector('[data-field="tour.contact.email"]');
   const tourPhoneEl = document.getElementById("tour_contact_phone");
   const tourTermsEl = document.getElementById("tour_accept_terms");
+  const tourFlightEl = document.querySelector('[data-field="tour.arrival.flight_number"]');
+  const tourShipEl = document.querySelector('[data-field="tour.arrival.vessel_name"]');
 
   function validateTourStep3() {
     const fn = (tourFirstNameEl?.value || "").trim();
@@ -522,6 +538,10 @@ document.addEventListener("DOMContentLoaded", function () {
       st.tourContact.last_name = (tourLastNameEl?.value || "").trim();
       st.tourContact.email = (tourEmailEl?.value || "").trim();
       st.tourContact.phone = (tourPhoneEl?.value || "").trim();
+      st.tour.arrival = {
+  flight_number: (tourFlightEl?.value || "").trim(),
+  vessel_name: (tourShipEl?.value || "").trim()
+};
 
       showTourStep(4);
     });
