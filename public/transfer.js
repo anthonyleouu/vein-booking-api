@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // =========================
-  // QUOTE FIELD NORMALIZATION
+  // ✅ QUOTE FIELD NORMALIZATION (ONLY CHANGE)
   // =========================
   function qDistanceKm(q) {
     const v = q?.distance_km ?? q?.distanceKm ?? q?.distance ?? null;
@@ -46,6 +46,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function forceStep3Gap() {
     const step3Wrap = document.querySelector('[data-step="transfer-3"]');
     const top = document.querySelector(".transfer-step-3-top");
+    const footer = document.querySelector(".step_footer");
 
     if (top) top.style.marginBottom = "30px";
 
@@ -132,7 +133,9 @@ document.addEventListener("DOMContentLoaded", function () {
     updateStepIndicator(n);
     setTimeout(forceStep3Gap, 0);
 
+    // ✅ init phone dropdown when step 4 becomes visible
     if (n === 4) setTimeout(initPhoneInputOnce, 50);
+
     if (n === 5) updateTransferReviewSummary();
   }
 
@@ -153,24 +156,22 @@ document.addEventListener("DOMContentLoaded", function () {
     return setText(datetimeSummary, d || t, "-");
   }
 
-  if (window.flatpickr) {
-    flatpickr('[data-picker="date"]', {
-      dateFormat: "Y-m-d",
-      minDate: "today",
-      disableMobile: true,
-      onClose: syncDatetime
-    });
+  flatpickr('[data-picker="date"]', {
+    dateFormat: "Y-m-d",
+    minDate: "today",
+    disableMobile: true,
+    onClose: syncDatetime
+  });
 
-    flatpickr('[data-picker="time"]', {
-      enableTime: true,
-      noCalendar: true,
-      dateFormat: "H:i",
-      time_24hr: true,
-      minuteIncrement: 15,
-      disableMobile: true,
-      onClose: syncDatetime
-    });
-  }
+  flatpickr('[data-picker="time"]', {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: "H:i",
+    time_24hr: true,
+    minuteIncrement: 15,
+    disableMobile: true,
+    onClose: syncDatetime
+  });
 
   if (dateInput) dateInput.addEventListener("blur", syncDatetime);
   if (timeInput) timeInput.addEventListener("blur", syncDatetime);
@@ -280,7 +281,7 @@ document.addEventListener("DOMContentLoaded", function () {
   syncDatetime();
 
   // =========================
-  // BUTTON LOADING
+  // BUTTON LOADING (no blue / no size jump)
   // =========================
   function setBtnLoading(btn, isLoading, loadingText, idleText) {
     if (!btn) return;
@@ -341,6 +342,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function renderQuote(quote) {
+    // ✅ ONLY CHANGE: use normalized accessors
     const km = qDistanceKm(quote);
     const min = qDurationMin(quote);
     const price = qPriceEur(quote);
@@ -393,6 +395,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const selectVehicleBtn = document.querySelector('[data-action="select-vehicle"][data-vehicle="vclass"]');
   const vehiclePriceEl = document.querySelector('[data-vehicle-price="vclass"]');
   const summaryVehicleEl = document.querySelector('[data-summary="transfer.vehicle"]');
+
   const selectVehicleLabelEl = document.querySelector('[data-vehicle-select-label="vclass"]');
 
   function setNextEnabled(btn, enabled) {
@@ -403,6 +406,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function refreshVehiclePriceFromQuote() {
+    // ✅ ONLY CHANGE: use normalized accessor
     const q = state().quote;
     const price = qPriceEur(q);
     if (!vehiclePriceEl) return;
@@ -480,20 +484,24 @@ document.addEventListener("DOMContentLoaded", function () {
   const phoneEl     = document.getElementById("contact_phone");
   const termsEl = document.getElementById("accept_terms");
 
-  function validateStep4() {
-    const fn = (firstNameEl ? firstNameEl.value : "").trim();
-    const ln = (lastNameEl ? lastNameEl.value : "").trim();
-    const em = (emailEl ? emailEl.value : "").trim();
-    const ph = (phoneEl ? phoneEl.value : "").trim();
-    const termsOk = !!(termsEl && termsEl.checked);
-
-    if (!fn || !ln) return { ok: false, msg: "Please enter first & last name." };
-    if (!isValidEmail(em)) return { ok: false, msg: "Please enter a valid email." };
-    if (!ph) return { ok: false, msg: "Please enter a phone number." };
-    if (!termsOk) return { ok: false, msg: "Please accept the Terms & Conditions & Privacy Policy." };
-
-    return { ok: true };
+  function isValidEmail(s) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
   }
+
+  function validateStep4() {
+  const fn = (firstNameEl ? firstNameEl.value : "").trim();
+  const ln = (lastNameEl ? lastNameEl.value : "").trim();
+  const em = (emailEl ? emailEl.value : "").trim();
+  const ph = (phoneEl ? phoneEl.value : "").trim();
+  const termsOk = !!(termsEl && termsEl.checked);
+
+  if (!fn || !ln) return { ok: false, msg: "Please enter first & last name." };
+  if (!isValidEmail(em)) return { ok: false, msg: "Please enter a valid email." };
+  if (!ph) return { ok: false, msg: "Please enter a phone number." };
+  if (!termsOk) return { ok: false, msg: "Please accept the Terms & Conditions & Privacy Policy." };
+
+  return { ok: true };
+}
 
   if (backStep4Btn) {
     backStep4Btn.addEventListener("click", function (e) {
@@ -548,6 +556,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     setText(document.querySelector('[data-summary="transfer.vehicle"]'), st.vehicle === "vclass" ? "Mercedes-Benz V Class" : "-");
 
+    // ✅ ONLY CHANGE: normalized accessors
     const km = qDistanceKm(quote);
     const min = qDurationMin(quote);
     const price = qPriceEur(quote);
@@ -579,10 +588,15 @@ document.addEventListener("DOMContentLoaded", function () {
       pickup_datetime_iso,
       pickup_place_id: pickupInput?.dataset?.placeId || "",
       dropoff_place_id: dropoffInput?.dataset?.placeId || "",
+
+      /* ✅ FIX (ONLY NEEDED CHANGE): send the addresses so backend can store them */
       pickup_address: pickupInput?.dataset?.address || pickupInput?.value || "",
       dropoff_address: dropoffInput?.dataset?.address || dropoffInput?.value || "",
+
+      // keep these as-is (your server can ignore or use)
       distance_km: quote.distance_km ?? quote.distanceKm ?? quote.distance,
       duration_min: quote.duration_min ?? quote.durationMin ?? quote.duration,
+
       vehicle: st.vehicle || "vclass",
       passengers: pax,
       luggage: luggage,
@@ -661,7 +675,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // =========================
-  // PHONE INIT
+  // PHONE INIT (restored + safe for hidden step)
   // =========================
   let __itiInstance = null;
 
@@ -720,4 +734,5 @@ document.addEventListener("DOMContentLoaded", function () {
 
   wireStepIndicatorClicks(showTransferStep);
   showTransferStep(Number(st.currentStep || 2));
+
 });

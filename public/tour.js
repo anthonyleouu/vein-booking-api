@@ -68,6 +68,22 @@ document.addEventListener("DOMContentLoaded", function () {
   const step3 = document.querySelector('[data-step="tour-3"]');
   const step4 = document.querySelector('[data-step="tour-4"]');
 
+  function updateTourStepIndicator(tourStepCurrent) {
+    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+      const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
+      stepEl.classList.remove("is-completed", "is-active");
+
+      if (stepNum < tourStepCurrent) stepEl.classList.add("is-completed");
+      if (stepNum === tourStepCurrent) stepEl.classList.add("is-active");
+    });
+
+    document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
+      const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
+      lineEl.classList.remove("is-completed");
+      if (tourStepCurrent > lineNum) lineEl.classList.add("is-completed");
+    });
+  }
+
   function showTourStep(n) {
     const st = ensureTourState();
     st.tourCurrentStep = n;
@@ -80,6 +96,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (n === 4) updateTourReviewSummary();
     }
 
+    updateTourStepIndicator(n);
+
     if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
   }
 
@@ -87,6 +105,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function bindTourCards() {
     document.querySelectorAll("[data-tour-card]").forEach((card) => {
+      card.style.cursor = "pointer";
+
       card.addEventListener("click", function (e) {
         e.preventDefault();
 
@@ -98,9 +118,26 @@ document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll("[data-tour-card]").forEach((c) => {
           c.classList.remove("is-selected");
         });
+
         card.classList.add("is-selected");
 
         showTourStep(2);
+      });
+    });
+  }
+
+  function wireTourStepIndicatorClicks() {
+    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+      stepEl.style.cursor = "pointer";
+
+      stepEl.addEventListener("click", function () {
+        const st = ensureTourState();
+        const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+
+        if (!st.tour.tour_id && targetStep > 1) return;
+        if (targetStep < 1 || targetStep > 4) return;
+
+        showTourStep(targetStep);
       });
     });
   }
