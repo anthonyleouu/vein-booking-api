@@ -104,18 +104,25 @@ document.addEventListener("DOMContentLoaded", function () {
   window.showTourStep = showTourStep;
 
   function bindTourCards() {
-  document.querySelectorAll("[data-tour-select]").forEach((btn) => {
+  const buttons = document.querySelectorAll("[data-tour-select]");
+  console.log("TOUR SELECT BUTTONS FOUND:", buttons.length);
+
+  buttons.forEach((btn) => {
     btn.style.cursor = "pointer";
 
     btn.addEventListener("click", function (e) {
       e.preventDefault();
       e.stopPropagation();
 
+      console.log("TOUR BUTTON CLICKED");
+
       const st = ensureTourState();
 
       st.tour.tour_id = btn.getAttribute("data-tour-id") || "";
       st.tour.tour_name = btn.getAttribute("data-tour-name") || "";
       st.tour.duration = btn.getAttribute("data-tour-duration") || "";
+
+      console.log("TOUR STATE SET:", st.tour);
 
       document.querySelectorAll("[data-tour-select]").forEach((b) => {
         b.classList.remove("is-selected");
