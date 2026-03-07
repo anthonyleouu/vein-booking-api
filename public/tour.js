@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-206");
+  console.log("TOUR JS VERSION 20260307-207");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -215,25 +215,30 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   const step4 = document.querySelector('[data-step="tour-4"]');
 
   function updateTourStepIndicator(tourStepCurrent) {
-    const st = ensureTourState();
-    const current = Number(tourStepCurrent || 1);
-    const maxReached = Number(st.tourMaxReachedStep || current || 1);
+  const st = ensureTourState();
+  const current = Number(tourStepCurrent || 1);
+  const maxReached = Number(st.tourMaxReachedStep || current || 1);
 
-    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-      const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
-      stepEl.classList.remove("is-completed", "is-active", "is-locked");
+  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+    const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
 
-      if (stepNum < current) stepEl.classList.add("is-completed");
-      if (stepNum === current) stepEl.classList.add("is-active");
-      if (stepNum > maxReached) stepEl.classList.add("is-locked");
-    });
+    stepEl.classList.remove("is-completed", "is-active", "is-locked");
 
-    document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
-      const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
-      lineEl.classList.remove("is-completed");
-      if (current >= lineNum) lineEl.classList.add("is-completed");
-    });
-  }
+    if (stepNum < current) stepEl.classList.add("is-completed");
+    if (stepNum === current) stepEl.classList.add("is-active");
+    if (stepNum > maxReached) stepEl.classList.add("is-locked");
+
+    // always allow clicks on reachable steps
+    stepEl.style.pointerEvents = stepNum <= maxReached ? "auto" : "none";
+    stepEl.style.cursor = stepNum <= maxReached ? "pointer" : "default";
+  });
+
+  document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
+    const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
+    lineEl.classList.remove("is-completed");
+    if (current >= lineNum) lineEl.classList.add("is-completed");
+  });
+}
 
   function showTourStep(n) {
   const st = ensureTourState();
@@ -297,19 +302,31 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   function wireTourStepIndicatorClicks() {
-    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-      stepEl.style.cursor = "pointer";
+  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+    stepEl.style.cursor = "pointer";
+    stepEl.style.pointerEvents = "auto";
 
-      stepEl.addEventListener("click", function () {
-        const st = ensureTourState();
-        const maxReached = Number(st.tourMaxReachedStep || 1);
-        const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+    stepEl.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
 
-        if (targetStep > maxReached) return;
-        showTourStep(targetStep);
+      const st = ensureTourState();
+      const maxReached = Number(st.tourMaxReachedStep || 1);
+      const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+
+      console.log("TOUR STEP CLICK", {
+        targetStep,
+        maxReached,
+        currentStep: st.tourCurrentStep
       });
+
+      if (!targetStep) return;
+      if (targetStep > maxReached) return;
+
+      showTourStep(targetStep);
     });
-  }
+  });
+}
 
   const tourDateInput = document.querySelector('input[data-tour-picker="date"]');
   const tourTimeInput = document.querySelector('input[data-tour-picker="time"]');
