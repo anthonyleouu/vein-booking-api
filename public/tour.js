@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-200");
+  console.log("TOUR JS VERSION 20260307-201");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -92,10 +92,16 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function toggleSummaryRows(selector, show) {
-    document.querySelectorAll(selector).forEach((el) => {
-      el.style.display = show ? "flex" : "none";
-    });
-  }
+  document.querySelectorAll(selector).forEach((el) => {
+    if (show) {
+      el.hidden = false;
+      el.style.display = "flex";
+    } else {
+      el.hidden = true;
+      el.style.display = "none";
+    }
+  });
+}
 
   function getAttrDeep(el, attrName) {
     if (!el) return "";
@@ -214,20 +220,25 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function showTourStep(n) {
-    const st = ensureTourState();
-    st.tourCurrentStep = n;
-    st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), n);
+  const st = ensureTourState();
+  st.tourCurrentStep = n;
+  st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), n);
 
-    if (step1) step1.style.display = n === 1 ? "block" : "none";
-    if (step2) step2.style.display = n === 2 ? "block" : "none";
-    if (step3) step3.style.display = n === 3 ? "block" : "none";
-    if (step4) step4.style.display = n === 4 ? "block" : "none";
+  if (step1) step1.style.display = n === 1 ? "block" : "none";
+  if (step2) step2.style.display = n === 2 ? "block" : "none";
+  if (step3) step3.style.display = n === 3 ? "block" : "none";
+  if (step4) step4.style.display = n === 4 ? "block" : "none";
 
-    updateTourStepIndicator(n);
+  updateTourStepIndicator(n);
 
-    if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
-    if (n === 4) updateTourReviewSummary();
+  if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
+
+  if (n === 4) {
+    setTimeout(() => {
+      updateTourReviewSummary();
+    }, 0);
   }
+}
 
   window.showTourStep = showTourStep;
 
@@ -879,26 +890,26 @@ document.addEventListener("DOMContentLoaded", function () {
       breakdown.dropoff_addon != null ? `€${breakdown.dropoff_addon}` : "-"
     );
 
-    const extraHours = num(st.tour.extra_hours);
-    const extraHoursTotal = num(breakdown.extra_hours_total);
-    const pickupAddon = num(breakdown.pickup_addon);
-    const dropoffAddon = num(breakdown.dropoff_addon);
+      const extraHours = num(st.tour.extra_hours);
+  const extraHoursTotal = num(breakdown.extra_hours_total);
+  const pickupAddon = num(breakdown.pickup_addon);
+  const dropoffAddon = num(breakdown.dropoff_addon);
 
-    toggleSummaryRows(".summary-extra-hours-row", extraHours > 0);
-    toggleSummaryRows(".summary-extra-hours-cost-row", extraHoursTotal > 0);
-    toggleSummaryRows(".summary-pickup-addon-row", pickupAddon > 0);
-    toggleSummaryRows(".summary-dropoff-addon-row", dropoffAddon > 0);
+  toggleSummaryRows(".summary-extra-hours-row", extraHours > 0);
+  toggleSummaryRows(".summary-extra-hours-cost-row", extraHoursTotal > 0);
+  toggleSummaryRows(".summary-pickup-addon-row", pickupAddon > 0);
+  toggleSummaryRows(".summary-dropoff-addon-row", dropoffAddon > 0);
 
-    console.log("SUMMARY HIDE CHECK", {
-      extraHours,
-      extraHoursTotal,
-      pickupAddon,
-      dropoffAddon,
-      extraHoursEls: document.querySelectorAll(".summary-extra-hours-row").length,
-      extraHoursCostEls: document.querySelectorAll(".summary-extra-hours-cost-row").length,
-      pickupAddonEls: document.querySelectorAll(".summary-pickup-addon-row").length,
-      dropoffAddonEls: document.querySelectorAll(".summary-dropoff-addon-row").length
-    });
+  console.log("SUMMARY HIDE CHECK", {
+    extraHours,
+    extraHoursTotal,
+    pickupAddon,
+    dropoffAddon,
+    extraHoursEls: document.querySelectorAll(".summary-extra-hours-row").length,
+    extraHoursCostEls: document.querySelectorAll(".summary-extra-hours-cost-row").length,
+    pickupAddonEls: document.querySelectorAll(".summary-pickup-addon-row").length,
+    dropoffAddonEls: document.querySelectorAll(".summary-dropoff-addon-row").length
+  });
   }
 
   if (backTour4Btn) {
