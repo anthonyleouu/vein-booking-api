@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
       pickup_mode: "athens_center",
       pickup_place_id: "",
       pickup_address: "",
-      dropoff_mode: "same_as_pickup",
+      dropoff_mode: "athens_center",
       dropoff_place_id: "",
       dropoff_address: "",
       quote: null,
@@ -672,7 +672,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function applyTourDefaultRadios() {
   const pickupDefault = document.querySelector('[data-tour-pickup-mode="athens_center"]');
-  const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="same_as_pickup"]');
+  const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="athens_center"]');
 
   if (pickupDefault && !document.querySelector('[data-tour-pickup-mode]:checked')) {
     pickupDefault.checked = true;
@@ -763,7 +763,7 @@ function setDefaultTourRadios() {
     document.querySelector('[data-tour-pickup-mode]:checked')?.getAttribute("data-tour-pickup-mode") || "athens_center";
 
   st.tour.dropoff_mode =
-    document.querySelector('[data-tour-dropoff-mode]:checked')?.getAttribute("data-tour-dropoff-mode") || "same_as_pickup";
+    document.querySelector('[data-tour-dropoff-mode]:checked')?.getAttribute("data-tour-dropoff-mode") || "athens_center";
 }
 
 ensureTourState();
