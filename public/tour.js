@@ -741,22 +741,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function normalizeTourRadioGroups() {
-  const pickupRadios = document.querySelectorAll('[data-tour-pickup-mode]');
-  const dropoffRadios = document.querySelectorAll('[data-tour-dropoff-mode]');
-
-  pickupRadios.forEach((radio) => {
-    radio.setAttribute("name", "tour_pickup_mode");
-  });
-
-  dropoffRadios.forEach((radio) => {
-    radio.setAttribute("name", "tour_dropoff_mode");
-  });
-}
-
-
+  
 ensureTourState();
-normalizeTourRadioGroups();
 applyTourDefaultRadios();
 bindTourCards();
 wireTourStepIndicatorClicks();
