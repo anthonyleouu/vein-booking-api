@@ -1,4 +1,6 @@
 document.addEventListener("DOMContentLoaded", function () {
+  console.log("TOUR JS VERSION 20260307-200");
+
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
     return window.__VEIN_BOOKING__;
@@ -82,6 +84,17 @@ document.addEventListener("DOMContentLoaded", function () {
       if (s) return s;
     }
     return "";
+  }
+
+  function num(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function toggleSummaryRows(selector, show) {
+    document.querySelectorAll(selector).forEach((el) => {
+      el.style.display = show ? "flex" : "none";
+    });
   }
 
   function getAttrDeep(el, attrName) {
@@ -422,13 +435,10 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function applyTourDefaultRadios() {
-    // Force the default DOM state regardless of what Webflow/browser restored.
     setWebflowRadioChecked("[data-tour-pickup-mode]", "athens_center");
     setWebflowRadioChecked("[data-tour-dropoff-mode]", "athens_center");
 
     const st = ensureTourState();
-
-    // Re-read from DOM after forcing checked states.
     st.tour.pickup_mode = getCheckedTourMode("[data-tour-pickup-mode]", "data-tour-pickup-mode", "athens_center");
     st.tour.dropoff_mode = getCheckedTourMode("[data-tour-dropoff-mode]", "data-tour-dropoff-mode", "athens_center");
 
@@ -441,8 +451,17 @@ document.addEventListener("DOMContentLoaded", function () {
   function syncTourModesFromDom() {
     const st = ensureTourState();
 
-    st.tour.pickup_mode = getCheckedTourMode("[data-tour-pickup-mode]", "data-tour-pickup-mode", st.tour.pickup_mode || "athens_center");
-    st.tour.dropoff_mode = getCheckedTourMode("[data-tour-dropoff-mode]", "data-tour-dropoff-mode", st.tour.dropoff_mode || "athens_center");
+    st.tour.pickup_mode = getCheckedTourMode(
+      "[data-tour-pickup-mode]",
+      "data-tour-pickup-mode",
+      st.tour.pickup_mode || "athens_center"
+    );
+
+    st.tour.dropoff_mode = getCheckedTourMode(
+      "[data-tour-dropoff-mode]",
+      "data-tour-dropoff-mode",
+      st.tour.dropoff_mode || "athens_center"
+    );
   }
 
   document.querySelectorAll("[data-tour-pickup-mode]").forEach((input) => {
@@ -795,33 +814,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const q = st.tour.quote || {};
     const breakdown = q.price_breakdown || {};
 
-    function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-const extraHours = num(st.tour.extra_hours);
-const extraHoursTotal = num(breakdown.extra_hours_total);
-const pickupAddon = num(breakdown.pickup_addon);
-const dropoffAddon = num(breakdown.dropoff_addon);
-
-toggleSummaryRows(".summary-extra-hours-row", extraHours > 0);
-toggleSummaryRows(".summary-extra-hours-cost-row", extraHoursTotal > 0);
-toggleSummaryRows(".summary-pickup-addon-row", pickupAddon > 0);
-toggleSummaryRows(".summary-dropoff-addon-row", dropoffAddon > 0);
-
-function toggleSummaryRows(selector, show) {
-  document.querySelectorAll(selector).forEach((el) => {
-    el.style.display = show ? "" : "none";
-  });
-}
-
-    function toggleSummary(selector, show) {
-  const el = document.querySelector(selector);
-  if (!el) return;
-  el.style.display = show ? "" : "none";
-}
-
     const dateVal = (tourDateInput?.value || "").trim();
     const timeVal = (tourTimeInput?.value || "").trim();
 
@@ -862,14 +854,51 @@ function toggleSummaryRows(selector, show) {
     setText(document.querySelector('[data-summary="tour.email"]'), st.tourContact.email || "-");
     setText(document.querySelector('[data-summary="tour.phone"]'), st.tourContact.phone || "-");
 
-    setText(document.querySelector('[data-summary="tour.total"]'), q.price_total_eur != null ? `€${q.price_total_eur}` : "-");
+    setText(
+      document.querySelector('[data-summary="tour.total"]'),
+      q.price_total_eur != null ? `€${q.price_total_eur}` : "-"
+    );
 
-    if (breakdown) {
-      setText(document.querySelector('[data-summary="tour.base_price"]'), breakdown.base != null ? `€${breakdown.base}` : "-");
-      setText(document.querySelector('[data-summary="tour.extra_hours_total"]'), breakdown.extra_hours_total != null ? `€${breakdown.extra_hours_total}` : "-");
-      setText(document.querySelector('[data-summary="tour.pickup_addon"]'), breakdown.pickup_addon != null ? `€${breakdown.pickup_addon}` : "-");
-      setText(document.querySelector('[data-summary="tour.dropoff_addon"]'), breakdown.dropoff_addon != null ? `€${breakdown.dropoff_addon}` : "-");
-    }
+    setText(
+      document.querySelector('[data-summary="tour.base_price"]'),
+      breakdown.base != null ? `€${breakdown.base}` : "-"
+    );
+
+    setText(
+      document.querySelector('[data-summary="tour.extra_hours_total"]'),
+      breakdown.extra_hours_total != null ? `€${breakdown.extra_hours_total}` : "-"
+    );
+
+    setText(
+      document.querySelector('[data-summary="tour.pickup_addon"]'),
+      breakdown.pickup_addon != null ? `€${breakdown.pickup_addon}` : "-"
+    );
+
+    setText(
+      document.querySelector('[data-summary="tour.dropoff_addon"]'),
+      breakdown.dropoff_addon != null ? `€${breakdown.dropoff_addon}` : "-"
+    );
+
+    const extraHours = num(st.tour.extra_hours);
+    const extraHoursTotal = num(breakdown.extra_hours_total);
+    const pickupAddon = num(breakdown.pickup_addon);
+    const dropoffAddon = num(breakdown.dropoff_addon);
+
+    toggleSummaryRows(".summary-extra-hours-row", extraHours > 0);
+    toggleSummaryRows(".summary-extra-hours-cost-row", extraHoursTotal > 0);
+    toggleSummaryRows(".summary-pickup-addon-row", pickupAddon > 0);
+    toggleSummaryRows(".summary-dropoff-addon-row", dropoffAddon > 0);
+
+    console.log("SUMMARY HIDE CHECK", {
+      extraHours,
+      extraHoursTotal,
+      pickupAddon,
+      dropoffAddon,
+      extraHoursEls: document.querySelectorAll(".summary-extra-hours-row").length,
+      extraHoursCostEls: document.querySelectorAll(".summary-extra-hours-cost-row").length,
+      pickupAddonEls: document.querySelectorAll(".summary-pickup-addon-row").length,
+      dropoffAddonEls: document.querySelectorAll(".summary-dropoff-addon-row").length
+    });
   }
 
   if (backTour4Btn) {
@@ -912,28 +941,6 @@ function toggleSummaryRows(selector, show) {
         confirmTourBtn.textContent = originalText || "CONFIRM BOOKING";
       }
     });
-
-    // Hide rows if value = 0 or not applicable
-
-toggleSummary(
-  ".summary-extra-hours",
-  (st.tour.extra_hours || 0) > 0
-);
-
-toggleSummary(
-  ".summary-extra-hours-cost",
-  (breakdown.extra_hours_total || 0) > 0
-);
-
-toggleSummary(
-  ".summary-pickup-addon",
-  (breakdown.pickup_addon || 0) > 0
-);
-
-toggleSummary(
-  ".summary-dropoff-addon",
-  (breakdown.dropoff_addon || 0) > 0
-);
   }
 
   let __tourItiInstance = null;
