@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-230");
+  console.log("TOUR JS VERSION 20260307-235");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
