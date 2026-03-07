@@ -22,6 +22,10 @@ document.addEventListener("DOMContentLoaded", function () {
       dropoff_address: "",
       quote: null,
       hold: null,
+      arrival: {
+        flight_number: "",
+        vessel_name: "",
+      },
     };
 
     st.tourContact = st.tourContact || {
@@ -30,6 +34,9 @@ document.addEventListener("DOMContentLoaded", function () {
       email: "",
       phone: "",
     };
+
+    st.tourCurrentStep = Number(st.tourCurrentStep || 1);
+    st.tourMaxReachedStep = Number(st.tourMaxReachedStep || 1);
 
     return st;
   }
@@ -69,112 +76,85 @@ document.addEventListener("DOMContentLoaded", function () {
   const step4 = document.querySelector('[data-step="tour-4"]');
 
   function updateTourStepIndicator(tourStepCurrent) {
-  const st = ensureTourState();
-  const maxReached = Number(st.tourMaxReachedStep || 1);
+    const st = ensureTourState();
+    const current = Number(tourStepCurrent || 1);
+    const maxReached = Number(st.tourMaxReachedStep || current || 1);
 
-  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-    const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
+    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+      const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
+      stepEl.classList.remove("is-completed", "is-active", "is-locked");
 
-    stepEl.classList.remove("is-completed", "is-active", "is-locked");
+      if (stepNum < current) stepEl.classList.add("is-completed");
+      if (stepNum === current) stepEl.classList.add("is-active");
+      if (stepNum > maxReached) stepEl.classList.add("is-locked");
+    });
 
-    if (stepNum < tourStepCurrent) {
-      stepEl.classList.add("is-completed");
-    }
-
-    if (stepNum === tourStepCurrent) {
-      stepEl.classList.add("is-active");
-    }
-
-    if (stepNum > maxReached) {
-      stepEl.classList.add("is-locked");
-      stepEl.style.pointerEvents = "none";
-      stepEl.style.cursor = "default";
-      stepEl.setAttribute("aria-disabled", "true");
-    } else {
-      stepEl.style.pointerEvents = "auto";
-      stepEl.style.cursor = "pointer";
-      stepEl.removeAttribute("aria-disabled");
-    }
-  });
-
-  document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
-    const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
-    lineEl.classList.remove("is-completed");
-    if (tourStepCurrent > lineNum) {
-      lineEl.classList.add("is-completed");
-    }
-  });
-}
-
-  function showTourStep(n) {
-  const st = ensureTourState();
-  st.tourCurrentStep = n;
-  st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), n);
-
-  if (step1) step1.style.display = n === 1 ? "block" : "none";
-  if (step2) step2.style.display = n === 2 ? "block" : "none";
-  if (step3) step3.style.display = n === 3 ? "block" : "none";
-  if (step4) {
-    step4.style.display = n === 4 ? "block" : "none";
-    if (n === 4) updateTourReviewSummary();
+    document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
+      const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
+      lineEl.classList.remove("is-completed");
+      if (current >= lineNum) lineEl.classList.add("is-completed");
+    });
   }
 
-  updateTourStepIndicator(n);
+  function showTourStep(n) {
+    const st = ensureTourState();
+    st.tourCurrentStep = n;
+    st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), n);
 
-  if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
-}
+    if (step1) step1.style.display = (n === 1) ? "block" : "none";
+    if (step2) step2.style.display = (n === 2) ? "block" : "none";
+    if (step3) step3.style.display = (n === 3) ? "block" : "none";
+    if (step4) step4.style.display = (n === 4) ? "block" : "none";
+
+    updateTourStepIndicator(n);
+
+    if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
+    if (n === 4) updateTourReviewSummary();
+  }
 
   window.showTourStep = showTourStep;
 
   function bindTourCards() {
-  const buttons = document.querySelectorAll("[data-tour-select]");
-  console.log("TOUR SELECT BUTTONS FOUND:", buttons.length);
+    const buttons = document.querySelectorAll("[data-tour-select]");
 
-  buttons.forEach((btn) => {
-    btn.style.cursor = "pointer";
+    buttons.forEach((btn) => {
+      btn.style.cursor = "pointer";
 
-    btn.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
 
-      console.log("TOUR BUTTON CLICKED");
+        const st = ensureTourState();
+        st.tour.tour_id = btn.getAttribute("data-tour-id") || "";
+        st.tour.tour_name = btn.getAttribute("data-tour-name") || "";
+        st.tour.duration = btn.getAttribute("data-tour-duration") || "";
 
-      const st = ensureTourState();
+        document.querySelectorAll("[data-tour-select]").forEach((b) => {
+          b.classList.remove("is-selected");
+        });
 
-      st.tour.tour_id = btn.getAttribute("data-tour-id") || "";
-      st.tour.tour_name = btn.getAttribute("data-tour-name") || "";
-      st.tour.duration = btn.getAttribute("data-tour-duration") || "";
+        btn.classList.add("is-selected");
 
-      console.log("TOUR STATE SET:", st.tour);
-
-      document.querySelectorAll("[data-tour-select]").forEach((b) => {
-        b.classList.remove("is-selected");
+        st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 2);
+        showTourStep(2);
       });
-
-      btn.classList.add("is-selected");
-
-      st.tourMaxReachedStep = 2;
-      showTourStep(2);
     });
-  });
-}
+  }
 
   function wireTourStepIndicatorClicks() {
-  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-    stepEl.addEventListener("click", function (e) {
-      e.preventDefault();
+    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+      stepEl.style.cursor = "pointer";
 
-      const st = ensureTourState();
-      const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
-      const maxReached = Number(st.tourMaxReachedStep || 1);
+      stepEl.addEventListener("click", function () {
+        const st = ensureTourState();
+        const maxReached = Number(st.tourMaxReachedStep || 1);
+        const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
 
-      if (targetStep > maxReached) return;
-      if (targetStep < 1 || targetStep > 4) return;
-
-      showTourStep(targetStep);
+        if (targetStep > maxReached) return;
+        showTourStep(targetStep);
+      });
     });
-  });
-}
+  }
 
   const tourDateInput = document.querySelector('input[data-tour-picker="date"]');
   const tourTimeInput = document.querySelector('input[data-tour-picker="time"]');
@@ -236,8 +216,47 @@ document.addEventListener("DOMContentLoaded", function () {
   updateCounterValue("tour.guests", 1);
   updateCounterValue("tour.extra_hours", 0);
 
+  function setWebflowRadioChecked(selector, value) {
+    const radios = document.querySelectorAll(selector);
+
+    radios.forEach((radio) => {
+      radio.checked = false;
+      const fake = radio.parentElement?.querySelector(".w-radio-input");
+      if (fake) fake.classList.remove("w--redirected-checked");
+    });
+
+    const target = document.querySelector(
+      `${selector}[value="${value}"], ${selector}[data-tour-pickup-mode="${value}"], ${selector}[data-tour-dropoff-mode="${value}"]`
+    );
+
+    if (target) {
+      target.checked = true;
+      const fake = target.parentElement?.querySelector(".w-radio-input");
+      if (fake) fake.classList.add("w--redirected-checked");
+    }
+  }
+
+  function normalizeTourRadioSettings() {
+    const pickupRadios = document.querySelectorAll("[data-tour-pickup-mode]");
+    const dropoffRadios = document.querySelectorAll("[data-tour-dropoff-mode]");
+
+    pickupRadios.forEach((radio) => {
+      const mode = radio.getAttribute("data-tour-pickup-mode");
+      radio.setAttribute("name", "tour_pickup_mode");
+      if (mode) radio.value = mode;
+    });
+
+    dropoffRadios.forEach((radio) => {
+      const mode = radio.getAttribute("data-tour-dropoff-mode");
+      radio.setAttribute("name", "tour_dropoff_mode");
+      if (mode) radio.value = mode;
+    });
+  }
+
   const pickupAddressWrap = document.querySelector('[data-tour-visible="pickup-address"]');
   const dropoffAddressWrap = document.querySelector('[data-tour-visible="dropoff-address"]');
+  const flightWrap = document.querySelector('[data-tour-visible="flight-field"]');
+  const shipWrap = document.querySelector('[data-tour-visible="ship-field"]');
 
   function syncTourModeVisibility() {
     const st = ensureTourState();
@@ -256,57 +275,67 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (dropoffAddressWrap) {
-      dropoffAddressWrap.style.display = st.tour.dropoff_mode === "same_as_pickup"
-        ? "none"
-        : (dropoffNeedsAddress ? "block" : "none");
+      dropoffAddressWrap.style.display =
+        st.tour.dropoff_mode === "same_as_pickup"
+          ? "none"
+          : (dropoffNeedsAddress ? "block" : "none");
     }
 
     if (st.tour.dropoff_mode === "same_as_pickup") {
       st.tour.dropoff_place_id = st.tour.pickup_place_id || "";
       st.tour.dropoff_address = st.tour.pickup_address || "";
     }
-      const flightWrap = document.querySelector('[data-tour-visible="flight-field"]');
-  const shipWrap = document.querySelector('[data-tour-visible="ship-field"]');
 
-  if (flightWrap) {
-    flightWrap.style.display = st.tour.pickup_mode === "airport" ? "block" : "none";
+    if (flightWrap) {
+      flightWrap.style.display = st.tour.pickup_mode === "airport" ? "block" : "none";
+    }
+
+    if (shipWrap) {
+      shipWrap.style.display = st.tour.pickup_mode === "piraeus_port" ? "block" : "none";
+    }
   }
 
-  if (shipWrap) {
-    shipWrap.style.display = st.tour.pickup_mode === "piraeus_port" ? "block" : "none";
-  }
+  function applyTourDefaultRadios() {
+    setWebflowRadioChecked('[data-tour-pickup-mode]', 'athens_center');
+    setWebflowRadioChecked('[data-tour-dropoff-mode]', 'athens_center');
+
+    const st = ensureTourState();
+    st.tour.pickup_mode = "athens_center";
+    st.tour.dropoff_mode = "athens_center";
   }
 
   document.querySelectorAll("[data-tour-pickup-mode]").forEach((input) => {
-  input.addEventListener("change", function () {
-    if (!this.checked) return;
+    input.addEventListener("change", function () {
+      if (!this.checked) return;
 
-    setWebflowRadioChecked('[data-tour-pickup-mode]', this.getAttribute("data-tour-pickup-mode"));
+      const mode = this.getAttribute("data-tour-pickup-mode") || "athens_center";
+      setWebflowRadioChecked('[data-tour-pickup-mode]', mode);
 
-    const st = ensureTourState();
-    st.tour.pickup_mode = this.getAttribute("data-tour-pickup-mode") || "athens_center";
+      const st = ensureTourState();
+      st.tour.pickup_mode = mode;
 
-    if (st.tour.dropoff_mode === "same_as_pickup") {
-      st.tour.dropoff_place_id = st.tour.pickup_place_id || "";
-      st.tour.dropoff_address = st.tour.pickup_address || "";
-    }
+      if (st.tour.dropoff_mode === "same_as_pickup") {
+        st.tour.dropoff_place_id = st.tour.pickup_place_id || "";
+        st.tour.dropoff_address = st.tour.pickup_address || "";
+      }
 
-    syncTourModeVisibility();
+      syncTourModeVisibility();
+    });
   });
-});
 
   document.querySelectorAll("[data-tour-dropoff-mode]").forEach((input) => {
-  input.addEventListener("change", function () {
-    if (!this.checked) return;
+    input.addEventListener("change", function () {
+      if (!this.checked) return;
 
-    setWebflowRadioChecked('[data-tour-dropoff-mode]', this.getAttribute("data-tour-dropoff-mode"));
+      const mode = this.getAttribute("data-tour-dropoff-mode") || "athens_center";
+      setWebflowRadioChecked('[data-tour-dropoff-mode]', mode);
 
-    const st = ensureTourState();
-    st.tour.dropoff_mode = this.getAttribute("data-tour-dropoff-mode") || "athens_center";
+      const st = ensureTourState();
+      st.tour.dropoff_mode = mode;
 
-    syncTourModeVisibility();
+      syncTourModeVisibility();
+    });
   });
-});
 
   const tourPickupInput = document.getElementById("tour_pickup_location");
   const tourDropoffInput = document.getElementById("tour_dropoff_location");
@@ -462,9 +491,9 @@ document.addEventListener("DOMContentLoaded", function () {
       customer_email: st.tourContact.email || "",
       customer_phone: st.tourContact.phone || "",
       arrival: {
-  flight_number: st.tour.arrival?.flight_number || "",
-  vessel_name: st.tour.arrival?.vessel_name || ""
-},
+        flight_number: st.tour.arrival?.flight_number || "",
+        vessel_name: st.tour.arrival?.vessel_name || "",
+      },
     };
 
     const res = await fetch(TOUR_HOLD_ENDPOINT, {
@@ -524,7 +553,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const quote = await requestTourQuote();
         const st = ensureTourState();
         st.tour.quote = quote;
-        st.tourMaxReachedStep = 3;
+        st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 3);
         showTourStep(3);
       } catch (err) {
         console.error("TOUR QUOTE ERROR:", err);
@@ -564,29 +593,29 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   if (nextTour3Btn) {
-  nextTour3Btn.addEventListener("click", function (e) {
-    e.preventDefault();
+    nextTour3Btn.addEventListener("click", function (e) {
+      e.preventDefault();
 
-    const v = validateTourStep3();
-    if (!v.ok) {
-      alert(v.msg);
-      return;
-    }
+      const v = validateTourStep3();
+      if (!v.ok) {
+        alert(v.msg);
+        return;
+      }
 
-    const st = ensureTourState();
-    st.tourContact.first_name = (tourFirstNameEl?.value || "").trim();
-    st.tourContact.last_name = (tourLastNameEl?.value || "").trim();
-    st.tourContact.email = (tourEmailEl?.value || "").trim();
-    st.tourContact.phone = (tourPhoneEl?.value || "").trim();
-    st.tour.arrival = {
-      flight_number: (tourFlightEl?.value || "").trim(),
-      vessel_name: (tourShipEl?.value || "").trim()
-    };
+      const st = ensureTourState();
+      st.tourContact.first_name = (tourFirstNameEl?.value || "").trim();
+      st.tourContact.last_name = (tourLastNameEl?.value || "").trim();
+      st.tourContact.email = (tourEmailEl?.value || "").trim();
+      st.tourContact.phone = (tourPhoneEl?.value || "").trim();
+      st.tour.arrival = {
+        flight_number: (tourFlightEl?.value || "").trim(),
+        vessel_name: (tourShipEl?.value || "").trim()
+      };
 
-    st.tourMaxReachedStep = 4;
-    showTourStep(4);
-  });
-}
+      st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 4);
+      showTourStep(4);
+    });
+  }
 
   function updateTourReviewSummary() {
     const st = ensureTourState();
@@ -704,47 +733,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  function setWebflowRadioChecked(selector, value) {
-  const radios = document.querySelectorAll(selector);
-
-  radios.forEach((radio) => {
-    radio.checked = false;
-
-    const fake = radio.parentElement?.querySelector('.w-radio-input');
-    if (fake) {
-      fake.classList.remove('w--redirected-checked');
-    }
-  });
-
-  const target = document.querySelector(`${selector}[value="${value}"], ${selector}[data-tour-pickup-mode="${value}"], ${selector}[data-tour-dropoff-mode="${value}"]`);
-
-  if (target) {
-    target.checked = true;
-
-    const fake = target.parentElement?.querySelector('.w-radio-input');
-    if (fake) {
-      fake.classList.add('w--redirected-checked');
-    }
-  }
-}
-
-  function applyTourDefaultRadios() {
-  const pickupDefault = document.querySelector('[data-tour-pickup-mode="athens_center"]');
-  const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="athens_center"]');
-
-  setTimeout(() => {
-    if (pickupDefault) pickupDefault.click();
-    if (dropoffDefault) dropoffDefault.click();
-
-    const st = ensureTourState();
-    st.tour.pickup_mode = "athens_center";
-    st.tour.dropoff_mode = "athens_center";
-
-    syncTourModeVisibility();
-  }, 100);
-}
-
-
   function initTourPhoneInputOnce() {
     const phoneInput = document.getElementById("tour_contact_phone");
     if (!phoneInput) return;
@@ -773,13 +761,13 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  
-const st = ensureTourState();
-st.tourMaxReachedStep = Number(st.tourMaxReachedStep || 1);
+  const st = ensureTourState();
+  st.tourMaxReachedStep = Number(st.tourMaxReachedStep || 1);
 
-applyTourDefaultRadios();
-bindTourCards();
-wireTourStepIndicatorClicks();
-syncTourModeVisibility();
-showTourStep(1);
+  normalizeTourRadioSettings();
+  bindTourCards();
+  wireTourStepIndicatorClicks();
+  applyTourDefaultRadios();
+  syncTourModeVisibility();
+  showTourStep(Number(st.tourCurrentStep || 1));
 });
