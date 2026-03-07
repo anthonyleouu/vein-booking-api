@@ -2,8 +2,6 @@ document.addEventListener("DOMContentLoaded", function () {
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
     return window.__VEIN_BOOKING__;
-    console.log("TOUR_JS_VERSION = v10");
-    window.__TOUR_JS_VERSION = "v10";
   }
 
   function ensureTourState() {
@@ -72,21 +70,39 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function updateTourStepIndicator(tourStepCurrent) {
   const st = ensureTourState();
-  const maxReached = Number(st.tourMaxReachedStep || tourStepCurrent || 1);
+  const maxReached = Number(st.tourMaxReachedStep || 1);
 
   document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
     const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
+
     stepEl.classList.remove("is-completed", "is-active", "is-locked");
 
-    if (stepNum < tourStepCurrent) stepEl.classList.add("is-completed");
-    if (stepNum === tourStepCurrent) stepEl.classList.add("is-active");
-    if (stepNum > maxReached) stepEl.classList.add("is-locked");
+    if (stepNum < tourStepCurrent) {
+      stepEl.classList.add("is-completed");
+    }
+
+    if (stepNum === tourStepCurrent) {
+      stepEl.classList.add("is-active");
+    }
+
+    if (stepNum > maxReached) {
+      stepEl.classList.add("is-locked");
+      stepEl.style.pointerEvents = "none";
+      stepEl.style.cursor = "default";
+      stepEl.setAttribute("aria-disabled", "true");
+    } else {
+      stepEl.style.pointerEvents = "auto";
+      stepEl.style.cursor = "pointer";
+      stepEl.removeAttribute("aria-disabled");
+    }
   });
 
   document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
     const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
     lineEl.classList.remove("is-completed");
-    if (tourStepCurrent > lineNum) lineEl.classList.add("is-completed");
+    if (tourStepCurrent > lineNum) {
+      lineEl.classList.add("is-completed");
+    }
   });
 }
 
@@ -137,6 +153,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       btn.classList.add("is-selected");
 
+      st.tourMaxReachedStep = 2;
       showTourStep(2);
     });
   });
@@ -144,9 +161,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function wireTourStepIndicatorClicks() {
   document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-    stepEl.style.cursor = "pointer";
+    stepEl.addEventListener("click", function (e) {
+      e.preventDefault();
 
-    stepEl.addEventListener("click", function () {
       const st = ensureTourState();
       const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
       const maxReached = Number(st.tourMaxReachedStep || 1);
@@ -507,6 +524,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const quote = await requestTourQuote();
         const st = ensureTourState();
         st.tour.quote = quote;
+        st.tourMaxReachedStep = 3;
         showTourStep(3);
       } catch (err) {
         console.error("TOUR QUOTE ERROR:", err);
@@ -546,28 +564,29 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   if (nextTour3Btn) {
-    nextTour3Btn.addEventListener("click", function (e) {
-      e.preventDefault();
+  nextTour3Btn.addEventListener("click", function (e) {
+    e.preventDefault();
 
-      const v = validateTourStep3();
-      if (!v.ok) {
-        alert(v.msg);
-        return;
-      }
+    const v = validateTourStep3();
+    if (!v.ok) {
+      alert(v.msg);
+      return;
+    }
 
-      const st = ensureTourState();
-      st.tourContact.first_name = (tourFirstNameEl?.value || "").trim();
-      st.tourContact.last_name = (tourLastNameEl?.value || "").trim();
-      st.tourContact.email = (tourEmailEl?.value || "").trim();
-      st.tourContact.phone = (tourPhoneEl?.value || "").trim();
-      st.tour.arrival = {
-  flight_number: (tourFlightEl?.value || "").trim(),
-  vessel_name: (tourShipEl?.value || "").trim()
-};
+    const st = ensureTourState();
+    st.tourContact.first_name = (tourFirstNameEl?.value || "").trim();
+    st.tourContact.last_name = (tourLastNameEl?.value || "").trim();
+    st.tourContact.email = (tourEmailEl?.value || "").trim();
+    st.tourContact.phone = (tourPhoneEl?.value || "").trim();
+    st.tour.arrival = {
+      flight_number: (tourFlightEl?.value || "").trim(),
+      vessel_name: (tourShipEl?.value || "").trim()
+    };
 
-      showTourStep(4);
-    });
-  }
+    st.tourMaxReachedStep = 4;
+    showTourStep(4);
+  });
+}
 
   function updateTourReviewSummary() {
     const st = ensureTourState();
