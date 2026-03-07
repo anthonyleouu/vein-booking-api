@@ -253,28 +253,35 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   document.querySelectorAll("[data-tour-pickup-mode]").forEach((input) => {
-    input.addEventListener("change", function () {
-      if (!this.checked) return;
-      const st = ensureTourState();
-      st.tour.pickup_mode = this.getAttribute("data-tour-pickup-mode") || "athens_center";
+  input.addEventListener("change", function () {
+    if (!this.checked) return;
 
-      if (st.tour.dropoff_mode === "same_as_pickup") {
-        st.tour.dropoff_place_id = st.tour.pickup_place_id || "";
-        st.tour.dropoff_address = st.tour.pickup_address || "";
-      }
+    setWebflowRadioChecked('[data-tour-pickup-mode]', this.getAttribute("data-tour-pickup-mode"));
 
-      syncTourModeVisibility();
-    });
+    const st = ensureTourState();
+    st.tour.pickup_mode = this.getAttribute("data-tour-pickup-mode") || "athens_center";
+
+    if (st.tour.dropoff_mode === "same_as_pickup") {
+      st.tour.dropoff_place_id = st.tour.pickup_place_id || "";
+      st.tour.dropoff_address = st.tour.pickup_address || "";
+    }
+
+    syncTourModeVisibility();
   });
+});
 
   document.querySelectorAll("[data-tour-dropoff-mode]").forEach((input) => {
-    input.addEventListener("change", function () {
-      if (!this.checked) return;
-      const st = ensureTourState();
-      st.tour.dropoff_mode = this.getAttribute("data-tour-dropoff-mode") || "same_as_pickup";
-      syncTourModeVisibility();
-    });
+  input.addEventListener("change", function () {
+    if (!this.checked) return;
+
+    setWebflowRadioChecked('[data-tour-dropoff-mode]', this.getAttribute("data-tour-dropoff-mode"));
+
+    const st = ensureTourState();
+    st.tour.dropoff_mode = this.getAttribute("data-tour-dropoff-mode") || "athens_center";
+
+    syncTourModeVisibility();
   });
+});
 
   const tourPickupInput = document.getElementById("tour_pickup_location");
   const tourDropoffInput = document.getElementById("tour_dropoff_location");
@@ -670,29 +677,38 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  function setWebflowRadioChecked(selector, value) {
+  const radios = document.querySelectorAll(selector);
+
+  radios.forEach((radio) => {
+    radio.checked = false;
+
+    const fake = radio.parentElement?.querySelector('.w-radio-input');
+    if (fake) {
+      fake.classList.remove('w--redirected-checked');
+    }
+  });
+
+  const target = document.querySelector(`${selector}[value="${value}"], ${selector}[data-tour-pickup-mode="${value}"], ${selector}[data-tour-dropoff-mode="${value}"]`);
+
+  if (target) {
+    target.checked = true;
+
+    const fake = target.parentElement?.querySelector('.w-radio-input');
+    if (fake) {
+      fake.classList.add('w--redirected-checked');
+    }
+  }
+}
+
   function applyTourDefaultRadios() {
-  const pickupRadios = document.querySelectorAll('[data-tour-pickup-mode]');
-  const dropoffRadios = document.querySelectorAll('[data-tour-dropoff-mode]');
-
-  const pickupDefault = document.querySelector('[data-tour-pickup-mode="athens_center"]');
-  const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="athens_center"]');
-
-  pickupRadios.forEach((radio) => {
-    radio.checked = false;
-  });
-
-  dropoffRadios.forEach((radio) => {
-    radio.checked = false;
-  });
-
-  if (pickupDefault) pickupDefault.checked = true;
-  if (dropoffDefault) dropoffDefault.checked = true;
+  setWebflowRadioChecked('[data-tour-pickup-mode]', 'athens_center');
+  setWebflowRadioChecked('[data-tour-dropoff-mode]', 'athens_center');
 
   const st = ensureTourState();
   st.tour.pickup_mode = "athens_center";
   st.tour.dropoff_mode = "athens_center";
 }
-
 
 
   function initTourPhoneInputOnce() {
@@ -735,6 +751,7 @@ document.addEventListener("DOMContentLoaded", function () {
     radio.setAttribute("name", "tour_dropoff_mode");
   });
 }
+
 
 ensureTourState();
 normalizeTourRadioGroups();
