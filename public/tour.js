@@ -115,31 +115,32 @@ document.addEventListener("DOMContentLoaded", function () {
   window.showTourStep = showTourStep;
 
   function bindTourCards() {
-    const buttons = document.querySelectorAll("[data-tour-select]");
+  const cards = document.querySelectorAll("[data-tour-card]");
 
-    buttons.forEach((btn) => {
-      btn.style.cursor = "pointer";
+  cards.forEach((card) => {
+    card.style.cursor = "pointer";
 
-      btn.addEventListener("click", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
+    card.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
 
-        const st = ensureTourState();
-        st.tour.tour_id = btn.getAttribute("data-tour-id") || "";
-        st.tour.tour_name = btn.getAttribute("data-tour-name") || "";
-        st.tour.duration = btn.getAttribute("data-tour-duration") || "";
+      const st = ensureTourState();
 
-        document.querySelectorAll("[data-tour-select]").forEach((b) => {
-          b.classList.remove("is-selected");
-        });
+      st.tour.tour_id = card.getAttribute("data-tour-id") || "";
+      st.tour.tour_name = card.getAttribute("data-tour-name") || "";
+      st.tour.duration = card.getAttribute("data-tour-duration") || "";
 
-        btn.classList.add("is-selected");
-
-        st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 2);
-        showTourStep(2);
+      document.querySelectorAll("[data-tour-card]").forEach((c) => {
+        c.classList.remove("is-selected");
       });
+
+      card.classList.add("is-selected");
+
+      st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 2);
+      showTourStep(2);
     });
-  }
+  });
+}
 
   function wireTourStepIndicatorClicks() {
     document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
