@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-204");
+  console.log("TOUR JS VERSION 20260307-205");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -104,11 +104,18 @@ function setSummaryText(summaryKey, value, fallback = "-") {
 }
 
 function toggleSummaryBlockBySummaryKey(summaryKey, show) {
-  const root = getTourReviewRoot();
+  const root = document.querySelector('[data-step="tour-4"]') || step4 || document;
+
   root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((valueEl) => {
     const block = valueEl.closest(".summary-block");
     if (!block) return;
-    block.style.display = show ? "flex" : "none";
+
+    if (show) {
+      block.style.removeProperty("display");
+      block.style.setProperty("display", "flex", "important");
+    } else {
+      block.style.setProperty("display", "none", "important");
+    }
   });
 }
 
@@ -244,7 +251,9 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
 
   if (n === 4) {
   requestAnimationFrame(() => {
-    updateTourReviewSummary();
+    requestAnimationFrame(() => {
+      updateTourReviewSummary();
+  });
   });
 }
 }
@@ -834,6 +843,15 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   const q = st.tour.quote || {};
   const breakdown = q.price_breakdown || {};
 
+  const root = document.querySelector('[data-step="tour-4"]') || step4 || document;
+
+  const setSummaryText = (summaryKey, value, fallback = "-") => {
+    root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((el) => {
+      const v = (value || "").toString().trim();
+      el.textContent = v ? v : fallback;
+    });
+  };
+
   const dateVal = (tourDateInput?.value || "").trim();
   const timeVal = (tourTimeInput?.value || "").trim();
 
@@ -894,11 +912,7 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
     extraHours,
     extraHoursTotal,
     pickupAddon,
-    dropoffAddon,
-    extraHoursMatches: getTourReviewRoot().querySelectorAll('[data-summary="tour.extra_hours"]').length,
-    extraHoursTotalMatches: getTourReviewRoot().querySelectorAll('[data-summary="tour.extra_hours_total"]').length,
-    pickupAddonMatches: getTourReviewRoot().querySelectorAll('[data-summary="tour.pickup_addon"]').length,
-    dropoffAddonMatches: getTourReviewRoot().querySelectorAll('[data-summary="tour.dropoff_addon"]').length
+    dropoffAddon
   });
 }
 
