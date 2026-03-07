@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-225");
+  console.log("TOUR JS VERSION 20260307-230");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -1051,4 +1051,36 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   syncTourModesFromDom();
   syncTourModeVisibility();
   showTourStep(Number(st.tourCurrentStep || 1));
+
+  setTimeout(() => {
+  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+    stepEl.style.cursor = "pointer";
+
+    stepEl.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const st = ensureTourState();
+      const currentStep = Number(st.tourCurrentStep || 1);
+      const maxReached = Math.max(
+        Number(st.tourMaxReachedStep || 1),
+        currentStep
+      );
+      const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+
+      console.log("TOUR STEP CLICK", {
+        targetStep,
+        currentStep,
+        maxReached
+      });
+
+      if (!targetStep) return;
+      if (targetStep > maxReached) return;
+
+      showTourStep(targetStep);
+    };
+  });
+
+  console.log("TOUR STEP HANDLERS ATTACHED");
+}, 300);
 });
