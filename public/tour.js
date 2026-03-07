@@ -795,6 +795,27 @@ document.addEventListener("DOMContentLoaded", function () {
     const q = st.tour.quote || {};
     const breakdown = q.price_breakdown || {};
 
+    function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+const extraHours = num(st.tour.extra_hours);
+const extraHoursTotal = num(breakdown.extra_hours_total);
+const pickupAddon = num(breakdown.pickup_addon);
+const dropoffAddon = num(breakdown.dropoff_addon);
+
+toggleSummaryRows(".summary-extra-hours-row", extraHours > 0);
+toggleSummaryRows(".summary-extra-hours-cost-row", extraHoursTotal > 0);
+toggleSummaryRows(".summary-pickup-addon-row", pickupAddon > 0);
+toggleSummaryRows(".summary-dropoff-addon-row", dropoffAddon > 0);
+
+function toggleSummaryRows(selector, show) {
+  document.querySelectorAll(selector).forEach((el) => {
+    el.style.display = show ? "" : "none";
+  });
+}
+
     function toggleSummary(selector, show) {
   const el = document.querySelector(selector);
   if (!el) return;
