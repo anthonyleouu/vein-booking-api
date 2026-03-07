@@ -368,8 +368,8 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   const limits = {
-    "tour.guests": { min: 1, max: 6 },
-    "tour.extra_hours": { min: 0, max: 12 },
+    "tour.guests": { min: 1, max: 7 },
+    "tour.extra_hours": { min: 0, max: 2 },
   };
 
   function updateCounterValue(field, newValue) {
