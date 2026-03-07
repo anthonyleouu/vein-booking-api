@@ -704,12 +704,19 @@ document.addEventListener("DOMContentLoaded", function () {
 }
 
   function applyTourDefaultRadios() {
-  setWebflowRadioChecked('[data-tour-pickup-mode]', 'athens_center');
-  setWebflowRadioChecked('[data-tour-dropoff-mode]', 'athens_center');
+  const pickupDefault = document.querySelector('[data-tour-pickup-mode="athens_center"]');
+  const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="athens_center"]');
 
-  const st = ensureTourState();
-  st.tour.pickup_mode = "athens_center";
-  st.tour.dropoff_mode = "athens_center";
+  setTimeout(() => {
+    if (pickupDefault) pickupDefault.click();
+    if (dropoffDefault) dropoffDefault.click();
+
+    const st = ensureTourState();
+    st.tour.pickup_mode = "athens_center";
+    st.tour.dropoff_mode = "athens_center";
+
+    syncTourModeVisibility();
+  }, 100);
 }
 
 
