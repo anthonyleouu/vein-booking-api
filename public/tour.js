@@ -761,6 +761,11 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  console.log("TOUR LOADED");
+  console.log("tour step indicators:", document.querySelectorAll("[data-tour-step-indicator]").length);
+  console.log("tour step lines:", document.querySelectorAll("[data-tour-step-line]").length);
+  console.log("tour dropoff athens radios:", document.querySelectorAll('[data-tour-dropoff-mode="athens_center"]').length);
+
   const st = ensureTourState();
   st.tourMaxReachedStep = Number(st.tourMaxReachedStep || 1);
 
