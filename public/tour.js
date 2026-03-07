@@ -71,37 +71,42 @@ document.addEventListener("DOMContentLoaded", function () {
   const step4 = document.querySelector('[data-step="tour-4"]');
 
   function updateTourStepIndicator(tourStepCurrent) {
-    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-      const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
-      stepEl.classList.remove("is-completed", "is-active");
+  const st = ensureTourState();
+  const maxReached = Number(st.tourMaxReachedStep || tourStepCurrent || 1);
 
-      if (stepNum < tourStepCurrent) stepEl.classList.add("is-completed");
-      if (stepNum === tourStepCurrent) stepEl.classList.add("is-active");
-    });
+  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+    const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
+    stepEl.classList.remove("is-completed", "is-active", "is-locked");
 
-    document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
-      const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
-      lineEl.classList.remove("is-completed");
-      if (tourStepCurrent > lineNum) lineEl.classList.add("is-completed");
-    });
-  }
+    if (stepNum < tourStepCurrent) stepEl.classList.add("is-completed");
+    if (stepNum === tourStepCurrent) stepEl.classList.add("is-active");
+    if (stepNum > maxReached) stepEl.classList.add("is-locked");
+  });
+
+  document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
+    const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
+    lineEl.classList.remove("is-completed");
+    if (tourStepCurrent > lineNum) lineEl.classList.add("is-completed");
+  });
+}
 
   function showTourStep(n) {
-    const st = ensureTourState();
-    st.tourCurrentStep = n;
+  const st = ensureTourState();
+  st.tourCurrentStep = n;
+  st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), n);
 
-    if (step1) step1.style.display = n === 1 ? "block" : "none";
-    if (step2) step2.style.display = n === 2 ? "block" : "none";
-    if (step3) step3.style.display = n === 3 ? "block" : "none";
-    if (step4) {
-      step4.style.display = n === 4 ? "block" : "none";
-      if (n === 4) updateTourReviewSummary();
-    }
-
-    updateTourStepIndicator(n);
-
-    if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
+  if (step1) step1.style.display = n === 1 ? "block" : "none";
+  if (step2) step2.style.display = n === 2 ? "block" : "none";
+  if (step3) step3.style.display = n === 3 ? "block" : "none";
+  if (step4) {
+    step4.style.display = n === 4 ? "block" : "none";
+    if (n === 4) updateTourReviewSummary();
   }
+
+  updateTourStepIndicator(n);
+
+  if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
+}
 
   window.showTourStep = showTourStep;
 
@@ -138,20 +143,21 @@ document.addEventListener("DOMContentLoaded", function () {
 }
 
   function wireTourStepIndicatorClicks() {
-    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-      stepEl.style.cursor = "pointer";
+  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+    stepEl.style.cursor = "pointer";
 
-      stepEl.addEventListener("click", function () {
-        const st = ensureTourState();
-        const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+    stepEl.addEventListener("click", function () {
+      const st = ensureTourState();
+      const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+      const maxReached = Number(st.tourMaxReachedStep || 1);
 
-        if (!st.tour.tour_id && targetStep > 1) return;
-        if (targetStep < 1 || targetStep > 4) return;
+      if (targetStep > maxReached) return;
+      if (targetStep < 1 || targetStep > 4) return;
 
-        showTourStep(targetStep);
-      });
+      showTourStep(targetStep);
     });
-  }
+  });
+}
 
   const tourDateInput = document.querySelector('input[data-tour-picker="date"]');
   const tourTimeInput = document.querySelector('input[data-tour-picker="time"]');
@@ -749,7 +755,9 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   
-ensureTourState();
+const st = ensureTourState();
+st.tourMaxReachedStep = Number(st.tourMaxReachedStep || 1);
+
 applyTourDefaultRadios();
 bindTourCards();
 wireTourStepIndicatorClicks();
