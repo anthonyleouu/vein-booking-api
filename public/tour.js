@@ -2,6 +2,8 @@ document.addEventListener("DOMContentLoaded", function () {
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
     return window.__VEIN_BOOKING__;
+    console.log("TOUR_JS_VERSION = v10");
+    window.__TOUR_JS_VERSION = "v10";
   }
 
   function ensureTourState() {
