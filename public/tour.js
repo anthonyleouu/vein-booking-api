@@ -7,7 +7,10 @@ document.addEventListener("DOMContentLoaded", function () {
   function ensureTourState() {
     const st = state();
 
-    st.tour = st.tour || {
+    st.tour = st.tour || {};
+    st.tourContact = st.tourContact || {};
+
+    st.tour = {
       tour_id: "",
       tour_name: "",
       duration: "",
@@ -26,13 +29,20 @@ document.addEventListener("DOMContentLoaded", function () {
         flight_number: "",
         vessel_name: "",
       },
+      ...st.tour,
+      arrival: {
+        flight_number: "",
+        vessel_name: "",
+        ...(st.tour?.arrival || {}),
+      },
     };
 
-    st.tourContact = st.tourContact || {
+    st.tourContact = {
       first_name: "",
       last_name: "",
       email: "",
       phone: "",
+      ...st.tourContact,
     };
 
     st.tourCurrentStep = Number(st.tourCurrentStep || 1);
@@ -64,6 +74,100 @@ document.addEventListener("DOMContentLoaded", function () {
     if (mode === "same_as_pickup") return "Same as Pickup";
     if (mode === "custom") return "Custom Address";
     return "-";
+  }
+
+  function firstNonEmpty(...vals) {
+    for (const v of vals) {
+      const s = String(v ?? "").trim();
+      if (s) return s;
+    }
+    return "";
+  }
+
+  function getAttrDeep(el, attrName) {
+    if (!el) return "";
+
+    const selfVal = el.getAttribute?.(attrName);
+    if (selfVal && String(selfVal).trim()) return String(selfVal).trim();
+
+    const ancestor = el.closest?.(`[${attrName}]`);
+    const ancestorVal = ancestor?.getAttribute?.(attrName);
+    if (ancestorVal && String(ancestorVal).trim()) return String(ancestorVal).trim();
+
+    const child = el.querySelector?.(`[${attrName}]`);
+    const childVal = child?.getAttribute?.(attrName);
+    if (childVal && String(childVal).trim()) return String(childVal).trim();
+
+    return "";
+  }
+
+  function getTourCardRoot(el) {
+    if (!el) return null;
+    return (
+      el.closest?.("[data-tour-card]") ||
+      el.closest?.("[data-tour-select]") ||
+      el.closest?.("[data-tour-id]") ||
+      null
+    );
+  }
+
+  function extractTourData(el) {
+    const root = getTourCardRoot(el) || el;
+
+    const tour_id = firstNonEmpty(
+      getAttrDeep(el, "data-tour-id"),
+      getAttrDeep(root, "data-tour-id")
+    );
+
+    const tour_name = firstNonEmpty(
+      getAttrDeep(el, "data-tour-name"),
+      getAttrDeep(root, "data-tour-name")
+    );
+
+    const duration = firstNonEmpty(
+      getAttrDeep(el, "data-tour-duration"),
+      getAttrDeep(root, "data-tour-duration")
+    );
+
+    return {
+      root,
+      tour_id,
+      tour_name,
+      duration,
+    };
+  }
+
+  function setSelectedTourState(data) {
+    const st = ensureTourState();
+
+    st.tour.tour_id = firstNonEmpty(data?.tour_id, st.tour.tour_id);
+    st.tour.tour_name = firstNonEmpty(data?.tour_name, st.tour.tour_name);
+    st.tour.duration = firstNonEmpty(data?.duration, st.tour.duration);
+
+    return st.tour;
+  }
+
+  function clearTourCardSelection() {
+    document.querySelectorAll("[data-tour-card], [data-tour-select], [data-tour-id]").forEach((el) => {
+      el.classList.remove("is-selected");
+      el.setAttribute("aria-pressed", "false");
+      el.setAttribute("aria-selected", "false");
+    });
+  }
+
+  function markTourCardSelected(root) {
+    if (!root) return;
+
+    root.classList.add("is-selected");
+    root.setAttribute("aria-pressed", "true");
+    root.setAttribute("aria-selected", "true");
+
+    const innerSelect = root.querySelector?.("[data-tour-select]");
+    if (innerSelect) {
+      innerSelect.classList.add("is-selected");
+      innerSelect.setAttribute("aria-pressed", "true");
+      innerSelect.setAttribute("aria-selected", "true");
+    }
   }
 
   const TOUR_QUOTE_ENDPOINT = "https://vein-booking-api.vercel.app/api/quote";
@@ -101,10 +205,10 @@ document.addEventListener("DOMContentLoaded", function () {
     st.tourCurrentStep = n;
     st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), n);
 
-    if (step1) step1.style.display = (n === 1) ? "block" : "none";
-    if (step2) step2.style.display = (n === 2) ? "block" : "none";
-    if (step3) step3.style.display = (n === 3) ? "block" : "none";
-    if (step4) step4.style.display = (n === 4) ? "block" : "none";
+    if (step1) step1.style.display = n === 1 ? "block" : "none";
+    if (step2) step2.style.display = n === 2 ? "block" : "none";
+    if (step3) step3.style.display = n === 3 ? "block" : "none";
+    if (step4) step4.style.display = n === 4 ? "block" : "none";
 
     updateTourStepIndicator(n);
 
@@ -115,35 +219,40 @@ document.addEventListener("DOMContentLoaded", function () {
   window.showTourStep = showTourStep;
 
   function bindTourCards() {
-  document.addEventListener("click", function (e) {
-    const trigger = e.target.closest("[data-tour-card], [data-tour-select]");
-    if (!trigger) return;
+    document.addEventListener("click", function (e) {
+      const trigger = e.target.closest("[data-tour-select], [data-tour-card], [data-tour-id]");
+      if (!trigger) return;
 
-    e.preventDefault();
-    e.stopPropagation();
+      const data = extractTourData(trigger);
 
-    const card =
-      trigger.matches("[data-tour-card]")
-        ? trigger
-        : trigger.closest("[data-tour-card]") || trigger;
+      if (!data.root) return;
+      if (!data.tour_id) {
+        console.warn("Tour click detected, but no data-tour-id found.", {
+          trigger,
+          root: data.root
+        });
+        return;
+      }
 
-    const st = ensureTourState();
+      e.preventDefault();
+      e.stopPropagation();
 
-    st.tour.tour_id = card.getAttribute("data-tour-id") || trigger.getAttribute("data-tour-id") || "";
-    st.tour.tour_name = card.getAttribute("data-tour-name") || trigger.getAttribute("data-tour-name") || "";
-    st.tour.duration = card.getAttribute("data-tour-duration") || trigger.getAttribute("data-tour-duration") || "";
+      clearTourCardSelection();
+      markTourCardSelected(data.root);
+      setSelectedTourState(data);
 
-    document.querySelectorAll("[data-tour-card], [data-tour-select]").forEach((el) => {
-      el.classList.remove("is-selected");
+      const st = ensureTourState();
+      st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 2);
+
+      console.log("Selected tour:", {
+        tour_id: st.tour.tour_id,
+        tour_name: st.tour.tour_name,
+        duration: st.tour.duration
+      });
+
+      showTourStep(2);
     });
-
-    card.classList.add("is-selected");
-    if (trigger !== card) trigger.classList.add("is-selected");
-
-    st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 2);
-    showTourStep(2);
-  });
-}
+  }
 
   function wireTourStepIndicatorClicks() {
     document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
@@ -205,7 +314,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (field === "tour.extra_hours") st.tour.extra_hours = clamped;
   }
 
-  document.querySelectorAll('[data-counter]').forEach((btn) => {
+  document.querySelectorAll("[data-counter]").forEach((btn) => {
     btn.addEventListener("click", function () {
       const field = this.getAttribute("data-field");
       const type = this.getAttribute("data-counter");
@@ -225,19 +334,32 @@ document.addEventListener("DOMContentLoaded", function () {
 
     radios.forEach((radio) => {
       radio.checked = false;
+      radio.removeAttribute("checked");
+
       const fake = radio.parentElement?.querySelector(".w-radio-input");
       if (fake) fake.classList.remove("w--redirected-checked");
     });
 
-    const target = document.querySelector(
-      `${selector}[value="${value}"], ${selector}[data-tour-pickup-mode="${value}"], ${selector}[data-tour-dropoff-mode="${value}"]`
-    );
+    const target = Array.from(radios).find((radio) => {
+      return (
+        radio.value === value ||
+        radio.getAttribute("data-tour-pickup-mode") === value ||
+        radio.getAttribute("data-tour-dropoff-mode") === value
+      );
+    });
 
     if (target) {
       target.checked = true;
+      target.setAttribute("checked", "checked");
+
       const fake = target.parentElement?.querySelector(".w-radio-input");
       if (fake) fake.classList.add("w--redirected-checked");
     }
+  }
+
+  function getCheckedTourMode(selector, attrName, fallback) {
+    const checked = Array.from(document.querySelectorAll(selector)).find((el) => el.checked);
+    return checked?.getAttribute(attrName) || checked?.value || fallback;
   }
 
   function normalizeTourRadioSettings() {
@@ -300,12 +422,27 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function applyTourDefaultRadios() {
-    setWebflowRadioChecked('[data-tour-pickup-mode]', 'athens_center');
-    setWebflowRadioChecked('[data-tour-dropoff-mode]', 'athens_center');
+    // Force the default DOM state regardless of what Webflow/browser restored.
+    setWebflowRadioChecked("[data-tour-pickup-mode]", "athens_center");
+    setWebflowRadioChecked("[data-tour-dropoff-mode]", "athens_center");
 
     const st = ensureTourState();
-    st.tour.pickup_mode = "athens_center";
-    st.tour.dropoff_mode = "athens_center";
+
+    // Re-read from DOM after forcing checked states.
+    st.tour.pickup_mode = getCheckedTourMode("[data-tour-pickup-mode]", "data-tour-pickup-mode", "athens_center");
+    st.tour.dropoff_mode = getCheckedTourMode("[data-tour-dropoff-mode]", "data-tour-dropoff-mode", "athens_center");
+
+    console.log("Applied default tour radio modes:", {
+      pickup_mode: st.tour.pickup_mode,
+      dropoff_mode: st.tour.dropoff_mode
+    });
+  }
+
+  function syncTourModesFromDom() {
+    const st = ensureTourState();
+
+    st.tour.pickup_mode = getCheckedTourMode("[data-tour-pickup-mode]", "data-tour-pickup-mode", st.tour.pickup_mode || "athens_center");
+    st.tour.dropoff_mode = getCheckedTourMode("[data-tour-dropoff-mode]", "data-tour-dropoff-mode", st.tour.dropoff_mode || "athens_center");
   }
 
   document.querySelectorAll("[data-tour-pickup-mode]").forEach((input) => {
@@ -313,7 +450,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!this.checked) return;
 
       const mode = this.getAttribute("data-tour-pickup-mode") || "athens_center";
-      setWebflowRadioChecked('[data-tour-pickup-mode]', mode);
+      setWebflowRadioChecked("[data-tour-pickup-mode]", mode);
 
       const st = ensureTourState();
       st.tour.pickup_mode = mode;
@@ -332,7 +469,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!this.checked) return;
 
       const mode = this.getAttribute("data-tour-dropoff-mode") || "athens_center";
-      setWebflowRadioChecked('[data-tour-dropoff-mode]', mode);
+      setWebflowRadioChecked("[data-tour-dropoff-mode]", mode);
 
       const st = ensureTourState();
       st.tour.dropoff_mode = mode;
@@ -391,31 +528,40 @@ document.addEventListener("DOMContentLoaded", function () {
 
   attachTourPlaces();
 
-function hydrateSelectedTourFromDom() {
-  const st = ensureTourState();
-  if (st.tour.tour_id) return;
+  function hydrateSelectedTourFromDom() {
+    const st = ensureTourState();
+    if (st.tour.tour_id) return;
 
-  const selected =
-    document.querySelector("[data-tour-card].is-selected") ||
-    document.querySelector("[data-tour-select].is-selected") ||
-    document.querySelector("[data-tour-card][data-tour-id]") ||
-    document.querySelector("[data-tour-select][data-tour-id]");
+    const selected =
+      document.querySelector("[data-tour-card].is-selected") ||
+      document.querySelector("[data-tour-select].is-selected") ||
+      document.querySelector("[data-tour-id].is-selected") ||
+      document.querySelector("[data-tour-card][data-tour-id]") ||
+      document.querySelector("[data-tour-select][data-tour-id]") ||
+      document.querySelector("[data-tour-id]");
 
-  if (!selected) return;
+    if (!selected) return;
 
-  st.tour.tour_id = selected.getAttribute("data-tour-id") || "";
-  st.tour.tour_name = selected.getAttribute("data-tour-name") || "";
-  st.tour.duration = selected.getAttribute("data-tour-duration") || "";
-}
+    const data = extractTourData(selected);
+    if (!data.tour_id) return;
+
+    setSelectedTourState(data);
+  }
 
   function validateTourStep2() {
     const st = ensureTourState();
+
     hydrateSelectedTourFromDom();
+    syncTourModesFromDom();
 
     const dateVal = (tourDateInput?.value || "").trim();
     const timeVal = (tourTimeInput?.value || "").trim();
 
-    if (!st.tour.tour_id) return { ok: false, msg: "Please choose a tour." };
+    if (!st.tour.tour_id) {
+      console.warn("Tour validation failed: missing tour_id", { tour: st.tour });
+      return { ok: false, msg: "Please choose a tour." };
+    }
+
     if (!dateVal) return { ok: false, msg: "Please choose a tour date." };
     if (!timeVal) return { ok: false, msg: "Please choose a pickup time." };
 
@@ -441,6 +587,7 @@ function hydrateSelectedTourFromDom() {
   async function requestTourQuote() {
     const st = ensureTourState();
     hydrateSelectedTourFromDom();
+    syncTourModesFromDom();
 
     const dateVal = (tourDateInput?.value || "").trim();
     const timeVal = (tourTimeInput?.value || "").trim();
@@ -486,6 +633,7 @@ function hydrateSelectedTourFromDom() {
 
   async function createTourHoldFromState() {
     const st = ensureTourState();
+    syncTourModesFromDom();
 
     const payload = {
       service_type: "TOUR",
@@ -566,6 +714,8 @@ function hydrateSelectedTourFromDom() {
     nextTour2Btn.addEventListener("click", async function (e) {
       e.preventDefault();
 
+      console.log("Current booking state before Step 2 validation:", window.__VEIN_BOOKING__);
+
       const v = validateTourStep2();
       if (!v.ok) {
         alert(v.msg);
@@ -644,6 +794,12 @@ function hydrateSelectedTourFromDom() {
     const st = ensureTourState();
     const q = st.tour.quote || {};
     const breakdown = q.price_breakdown || {};
+
+    function toggleSummary(selector, show) {
+  const el = document.querySelector(selector);
+  if (!el) return;
+  el.style.display = show ? "" : "none";
+}
 
     const dateVal = (tourDateInput?.value || "").trim();
     const timeVal = (tourTimeInput?.value || "").trim();
@@ -735,6 +891,28 @@ function hydrateSelectedTourFromDom() {
         confirmTourBtn.textContent = originalText || "CONFIRM BOOKING";
       }
     });
+
+    // Hide rows if value = 0 or not applicable
+
+toggleSummary(
+  ".summary-extra-hours",
+  (st.tour.extra_hours || 0) > 0
+);
+
+toggleSummary(
+  ".summary-extra-hours-cost",
+  (breakdown.extra_hours_total || 0) > 0
+);
+
+toggleSummary(
+  ".summary-pickup-addon",
+  (breakdown.pickup_addon || 0) > 0
+);
+
+toggleSummary(
+  ".summary-dropoff-addon",
+  (breakdown.dropoff_addon || 0) > 0
+);
   }
 
   let __tourItiInstance = null;
@@ -788,6 +966,7 @@ function hydrateSelectedTourFromDom() {
   console.log("tour step indicators:", document.querySelectorAll("[data-tour-step-indicator]").length);
   console.log("tour step lines:", document.querySelectorAll("[data-tour-step-line]").length);
   console.log("tour dropoff athens radios:", document.querySelectorAll('[data-tour-dropoff-mode="athens_center"]').length);
+  console.log("tour dropoff same_as_pickup radios:", document.querySelectorAll('[data-tour-dropoff-mode="same_as_pickup"]').length);
 
   const st = ensureTourState();
   st.tourMaxReachedStep = Number(st.tourMaxReachedStep || 1);
@@ -796,6 +975,7 @@ function hydrateSelectedTourFromDom() {
   bindTourCards();
   wireTourStepIndicatorClicks();
   applyTourDefaultRadios();
+  syncTourModesFromDom();
   syncTourModeVisibility();
   showTourStep(Number(st.tourCurrentStep || 1));
 });
