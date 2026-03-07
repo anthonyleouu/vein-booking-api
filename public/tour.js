@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-203");
+  console.log("TOUR JS VERSION 20260307-204");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -91,12 +91,25 @@ document.addEventListener("DOMContentLoaded", function () {
   return Number.isFinite(n) ? n : 0;
 }
 
-function toggleSummaryBlockBySummaryKey(summaryKey, show) {
-  const valueEl = document.querySelector(`[data-summary="${summaryKey}"]`);
-  const block = valueEl ? valueEl.closest(".summary-block") : null;
-  if (!block) return;
+function getTourReviewRoot() {
+  return document.querySelector('[data-step="tour-4"]') || step4 || document;
+}
 
-  block.style.display = show ? "flex" : "none";
+function setSummaryText(summaryKey, value, fallback = "-") {
+  const root = getTourReviewRoot();
+  root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((el) => {
+    const v = (value || "").toString().trim();
+    el.textContent = v ? v : fallback;
+  });
+}
+
+function toggleSummaryBlockBySummaryKey(summaryKey, show) {
+  const root = getTourReviewRoot();
+  root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((valueEl) => {
+    const block = valueEl.closest(".summary-block");
+    if (!block) return;
+    block.style.display = show ? "flex" : "none";
+  });
 }
 
   function getAttrDeep(el, attrName) {
@@ -230,10 +243,10 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
 
   if (n === 4) {
-    setTimeout(() => {
-      updateTourReviewSummary();
-    }, 0);
-  }
+  requestAnimationFrame(() => {
+    updateTourReviewSummary();
+  });
+}
 }
 
   window.showTourStep = showTourStep;
@@ -841,50 +854,31 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
             : (st.tour.dropoff_address || tourDropoffInput?.value || "-")
         );
 
-  setText(document.querySelector('[data-summary="tour.name"]'), st.tour.tour_name || "-");
-  setText(document.querySelector('[data-summary="tour.duration"]'), st.tour.duration || "-");
-  setText(document.querySelector('[data-summary="tour.datetime"]'), formatDateTime(dateVal, timeVal));
-  setText(document.querySelector('[data-summary="tour.guests"]'), String(st.tour.passengers || 1));
-  setText(document.querySelector('[data-summary="tour.extra_hours"]'), String(st.tour.extra_hours || 0));
+  setSummaryText("tour.name", st.tour.tour_name || "-");
+  setSummaryText("tour.duration", st.tour.duration || "-");
+  setSummaryText("tour.datetime", formatDateTime(dateVal, timeVal));
+  setSummaryText("tour.guests", String(st.tour.passengers || 1));
+  setSummaryText("tour.extra_hours", String(st.tour.extra_hours || 0));
 
-  setText(document.querySelector('[data-summary="tour.pickup_mode"]'), presetLabelForMode(st.tour.pickup_mode));
-  setText(document.querySelector('[data-summary="tour.pickup"]'), pickupText);
+  setSummaryText("tour.pickup_mode", presetLabelForMode(st.tour.pickup_mode));
+  setSummaryText("tour.pickup", pickupText);
 
-  setText(
-    document.querySelector('[data-summary="tour.dropoff_mode"]'),
+  setSummaryText(
+    "tour.dropoff_mode",
     st.tour.dropoff_mode === "same_as_pickup" ? "Same as Pickup" : presetLabelForMode(st.tour.dropoff_mode)
   );
-  setText(document.querySelector('[data-summary="tour.dropoff"]'), dropoffText);
+  setSummaryText("tour.dropoff", dropoffText);
 
-  setText(document.querySelector('[data-summary="tour.first_name"]'), st.tourContact.first_name || "-");
-  setText(document.querySelector('[data-summary="tour.last_name"]'), st.tourContact.last_name || "-");
-  setText(document.querySelector('[data-summary="tour.email"]'), st.tourContact.email || "-");
-  setText(document.querySelector('[data-summary="tour.phone"]'), st.tourContact.phone || "-");
+  setSummaryText("tour.first_name", st.tourContact.first_name || "-");
+  setSummaryText("tour.last_name", st.tourContact.last_name || "-");
+  setSummaryText("tour.email", st.tourContact.email || "-");
+  setSummaryText("tour.phone", st.tourContact.phone || "-");
 
-  setText(
-    document.querySelector('[data-summary="tour.total"]'),
-    q.price_total_eur != null ? `€${q.price_total_eur}` : "-"
-  );
-
-  setText(
-    document.querySelector('[data-summary="tour.base_price"]'),
-    breakdown.base != null ? `€${breakdown.base}` : "-"
-  );
-
-  setText(
-    document.querySelector('[data-summary="tour.extra_hours_total"]'),
-    breakdown.extra_hours_total != null ? `€${breakdown.extra_hours_total}` : "-"
-  );
-
-  setText(
-    document.querySelector('[data-summary="tour.pickup_addon"]'),
-    breakdown.pickup_addon != null ? `€${breakdown.pickup_addon}` : "-"
-  );
-
-  setText(
-    document.querySelector('[data-summary="tour.dropoff_addon"]'),
-    breakdown.dropoff_addon != null ? `€${breakdown.dropoff_addon}` : "-"
-  );
+  setSummaryText("tour.total", q.price_total_eur != null ? `€${q.price_total_eur}` : "-");
+  setSummaryText("tour.base_price", breakdown.base != null ? `€${breakdown.base}` : "-");
+  setSummaryText("tour.extra_hours_total", breakdown.extra_hours_total != null ? `€${breakdown.extra_hours_total}` : "-");
+  setSummaryText("tour.pickup_addon", breakdown.pickup_addon != null ? `€${breakdown.pickup_addon}` : "-");
+  setSummaryText("tour.dropoff_addon", breakdown.dropoff_addon != null ? `€${breakdown.dropoff_addon}` : "-");
 
   const extraHours = num(st.tour.extra_hours);
   const extraHoursTotal = num(breakdown.extra_hours_total);
@@ -900,7 +894,11 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
     extraHours,
     extraHoursTotal,
     pickupAddon,
-    dropoffAddon
+    dropoffAddon,
+    extraHoursMatches: getTourReviewRoot().querySelectorAll('[data-summary="tour.extra_hours"]').length,
+    extraHoursTotalMatches: getTourReviewRoot().querySelectorAll('[data-summary="tour.extra_hours_total"]').length,
+    pickupAddonMatches: getTourReviewRoot().querySelectorAll('[data-summary="tour.pickup_addon"]').length,
+    dropoffAddonMatches: getTourReviewRoot().querySelectorAll('[data-summary="tour.dropoff_addon"]').length
   });
 }
 
