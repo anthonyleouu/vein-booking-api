@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { configTable, toursTable, bookingsTable } = require("../lib/airtable");
 const { findConflicts } = require("../lib/availability");
-const { tourPrice, isNightPickup, transferPrice } = require("../lib/pricing");
+const { tourPrice, isNightPickup } = require("../lib/pricing");
 
 function presetAddressForMode(mode) {
   if (mode === "airport") return "Athens International Airport";
@@ -53,6 +53,37 @@ async function getDistanceMetrics({ originPlaceId, destinationPlaceId, serverKey
   return { distance_km, duration_min };
 }
 
+function transferPriceEquivalent({ distance_km, is_night, vehicleCfg }) {
+  const base = Number(vehicleCfg.transfer_base_fare || 0);
+  const rate = Number(vehicleCfg.transfer_rate_per_km || 0);
+  const freeKm = Number(vehicleCfg.transfer_free_km || 0);
+  const minFare = Number(vehicleCfg.transfer_minimum_fare || 0);
+
+  const extraKm = Math.max(0, Number(distance_km || 0) - freeKm);
+  const distanceCost = extraKm * rate;
+
+  let subtotal = base + distanceCost;
+  if (minFare > 0) subtotal = Math.max(minFare, subtotal);
+
+  let total = subtotal;
+
+  const nightType = vehicleCfg.night_type;
+  const nightValue = Number(vehicleCfg.night_value || 0);
+
+  if (is_night) {
+    if (nightType === "PERCENT") total = subtotal * (1 + nightValue / 100);
+    if (nightType === "FIXED") total = subtotal + nightValue;
+  }
+
+  total = Math.floor(total);
+
+  return {
+    total,
+    subtotal,
+    distance_km: Math.round(Number(distance_km || 0) * 10) / 10,
+  };
+}
+
 async function getCustomTourAddon({ customPlaceId, homePlaceId, serverKey, vehicleCfg }) {
   const metrics = await getDistanceMetrics({
     originPlaceId: homePlaceId,
@@ -60,7 +91,7 @@ async function getCustomTourAddon({ customPlaceId, homePlaceId, serverKey, vehic
     serverKey,
   });
 
-  const transferEquivalent = transferPrice({
+  const transferEquivalent = transferPriceEquivalent({
     distance_km: metrics.distance_km,
     is_night: false,
     vehicleCfg,
@@ -77,7 +108,6 @@ async function getCustomTourAddon({ customPlaceId, homePlaceId, serverKey, vehic
 }
 
 module.exports = async (req, res) => {
-  // ---- CORS (Webflow -> Vercel) ----
   const allowedOrigins = [
     "https://vip-athens-transfer.webflow.io",
     // "https://veindigital.co",
@@ -87,6 +117,7 @@ module.exports = async (req, res) => {
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
+
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -96,19 +127,28 @@ module.exports = async (req, res) => {
   }
 
   try {
-    if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
+    if (req.method !== "POST") {
+      return res.status(405).json({ ok: false, error: "POST only" });
+    }
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     const { service_type } = body;
-    if (!service_type) return res.status(400).json({ ok: false, error: "service_type required" });
+
+    if (!service_type) {
+      return res.status(400).json({ ok: false, error: "service_type required" });
+    }
 
     const globalRows = await configTable()
       .select({ maxRecords: 1, filterByFormula: `{key}='GLOBAL'` })
       .firstPage();
-    if (!globalRows.length) return res.status(500).json({ ok: false, error: "Config row GLOBAL missing" });
-    const globalCfg = globalRows[0].fields;
 
+    if (!globalRows.length) {
+      return res.status(500).json({ ok: false, error: "Config row GLOBAL missing" });
+    }
+
+    const globalCfg = globalRows[0].fields;
     const holdMins = Number(globalCfg.hold_expiry_minutes || 15);
+
     const now = new Date();
     const expiresAt = new Date(now.getTime() + holdMins * 60 * 1000);
 
@@ -134,8 +174,13 @@ module.exports = async (req, res) => {
         customer_last_name,
       } = body;
 
-      if (!tour_id) return res.status(400).json({ ok: false, error: "tour_id required" });
-      if (!pickup_datetime_iso) return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
+      if (!tour_id) {
+        return res.status(400).json({ ok: false, error: "tour_id required" });
+      }
+
+      if (!pickup_datetime_iso) {
+        return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
+      }
 
       const pickupMode = String(pickup_mode || "athens_center").trim();
       const requestedDropoffMode = String(dropoff_mode || "same_as_pickup").trim();
@@ -166,29 +211,47 @@ module.exports = async (req, res) => {
 
       const pickupNeedsAddress = pickupMode === "athens_center" || pickupMode === "custom";
       if (pickupNeedsAddress && !pickup_place_id) {
-        return res.status(400).json({ ok: false, error: "pickup_place_id required for selected pickup_mode" });
+        return res.status(400).json({
+          ok: false,
+          error: "pickup_place_id required for selected pickup_mode",
+        });
       }
 
-      const effectiveDropoffMode = requestedDropoffMode === "same_as_pickup" ? pickupMode : requestedDropoffMode;
-      const effectiveDropoffPlaceId = requestedDropoffMode === "same_as_pickup" ? (pickup_place_id || "") : (dropoff_place_id || "");
+      const effectiveDropoffMode =
+        requestedDropoffMode === "same_as_pickup" ? pickupMode : requestedDropoffMode;
+
+      const effectiveDropoffPlaceId =
+        requestedDropoffMode === "same_as_pickup" ? (pickup_place_id || "") : (dropoff_place_id || "");
+
       const effectiveDropoffAddress =
         requestedDropoffMode === "same_as_pickup"
           ? (pickup_address || presetAddressForMode(pickupMode))
           : (dropoff_address || presetAddressForMode(requestedDropoffMode));
 
-      const dropoffNeedsAddress = effectiveDropoffMode === "athens_center" || effectiveDropoffMode === "custom";
+      const dropoffNeedsAddress =
+        effectiveDropoffMode === "athens_center" || effectiveDropoffMode === "custom";
+
       if (dropoffNeedsAddress && !effectiveDropoffPlaceId) {
-        return res.status(400).json({ ok: false, error: "dropoff_place_id required for selected dropoff_mode" });
+        return res.status(400).json({
+          ok: false,
+          error: "dropoff_place_id required for selected dropoff_mode",
+        });
       }
 
       const tourRows = await toursTable()
         .select({ maxRecords: 1, filterByFormula: `{tour_id}='${tour_id}'` })
         .firstPage();
-      if (!tourRows.length) return res.status(404).json({ ok: false, error: "Tour not found" });
+
+      if (!tourRows.length) {
+        return res.status(404).json({ ok: false, error: "Tour not found" });
+      }
+
       const tour = tourRows[0].fields;
 
       const serverKey = process.env.GOOGLE_MAPS_SERVER_KEY;
-      if (!serverKey) return res.status(500).json({ ok: false, error: "Missing GOOGLE_MAPS_SERVER_KEY env var" });
+      if (!serverKey) {
+        return res.status(500).json({ ok: false, error: "Missing GOOGLE_MAPS_SERVER_KEY env var" });
+      }
 
       let vclassCfg = null;
       const needsCustomAddon = pickupMode === "custom" || effectiveDropoffMode === "custom";
@@ -216,6 +279,7 @@ module.exports = async (req, res) => {
 
       if (pickupMode === "airport") pickupAddon = Number(tour.airport_fee || 0);
       if (pickupMode === "piraeus_port") pickupAddon = Number(tour.piraeus_port_fee || 0);
+
       if (pickupMode === "custom") {
         pickupCustomMeta = await getCustomTourAddon({
           customPlaceId: pickup_place_id,
@@ -228,6 +292,7 @@ module.exports = async (req, res) => {
 
       if (effectiveDropoffMode === "airport") dropoffAddon = Number(tour.airport_fee || 0);
       if (effectiveDropoffMode === "piraeus_port") dropoffAddon = Number(tour.piraeus_port_fee || 0);
+
       if (effectiveDropoffMode === "custom") {
         dropoffCustomMeta = await getCustomTourAddon({
           customPlaceId: effectiveDropoffPlaceId,
@@ -247,15 +312,25 @@ module.exports = async (req, res) => {
       });
 
       const start = new Date(pickup_datetime_iso);
-      const durationHours = Number(tour.included_duration_hours || 0) + Number(extra_hours || 0);
+      const durationHours =
+        Number(tour.included_duration_hours || 0) + Number(extra_hours || 0);
+
       const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
 
-      const blockStart = new Date(start.getTime() - Number(tour.buffer_before_min || 0) * 60 * 1000);
-      const blockEnd = new Date(end.getTime() + Number(tour.buffer_after_min || 0) * 60 * 1000);
+      const blockStart = new Date(
+        start.getTime() - Number(tour.buffer_before_min || 0) * 60 * 1000
+      );
+      const blockEnd = new Date(
+        end.getTime() + Number(tour.buffer_after_min || 0) * 60 * 1000
+      );
 
       const conflicts = await findConflicts(blockStart.toISOString(), blockEnd.toISOString());
       if (conflicts.length) {
-        return res.status(200).json({ ok: true, available: false, message: "No Vehicles Available" });
+        return res.status(200).json({
+          ok: true,
+          available: false,
+          message: "No Vehicles Available",
+        });
       }
 
       const bookingId = crypto.randomUUID();
@@ -294,6 +369,7 @@ module.exports = async (req, res) => {
 
             pickup_place_id: pickup_place_id || "",
             pickup_address: pickup_address || presetAddressForMode(pickupMode),
+
             dropoff_place_id: effectiveDropoffPlaceId || "",
             dropoff_address: effectiveDropoffAddress || "",
 
@@ -329,6 +405,8 @@ module.exports = async (req, res) => {
         pickup_datetime_iso,
         pickup_place_id,
         dropoff_place_id,
+        pickup_address,
+        dropoff_address,
         distance_km,
         duration_min,
         vehicle,
@@ -343,16 +421,21 @@ module.exports = async (req, res) => {
         arrival,
       } = body;
 
-      if (!pickup_datetime_iso) return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
+      if (!pickup_datetime_iso) {
+        return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
+      }
 
       const vehicleKey = (vehicle || "vclass").toString().trim() || "vclass";
 
       const vehicleRows = await configTable()
         .select({ maxRecords: 1, filterByFormula: `{key}='${vehicleKey}'` })
         .firstPage();
-      if (!vehicleRows.length) return res.status(500).json({ ok: false, error: `Config row ${vehicleKey} missing` });
-      const vcfg = vehicleRows[0].fields;
 
+      if (!vehicleRows.length) {
+        return res.status(500).json({ ok: false, error: `Config row ${vehicleKey} missing` });
+      }
+
+      const vcfg = vehicleRows[0].fields;
       const pickup = new Date(pickup_datetime_iso);
 
       const nightStart = Number(globalCfg.night_start_hour ?? vcfg.night_start_hour ?? 0);
@@ -364,28 +447,18 @@ module.exports = async (req, res) => {
       const durMin =
         typeof duration_min === "number" ? duration_min : Number(duration_min || 0) || 0;
 
-      const base = Number(vcfg.transfer_base_fare || 0);
-      const rate = Number(vcfg.transfer_rate_per_km || 0);
-      const freeKm = Number(vcfg.transfer_free_km || 0);
-      const minFare = Number(vcfg.transfer_minimum_fare || 0);
-
-      const extraKm = Math.max(0, distKm - freeKm);
-      const distanceCost = extraKm * rate;
-
-      let subtotal = base + distanceCost;
-      if (minFare > 0) subtotal = Math.max(minFare, subtotal);
-
-      let total = subtotal;
-
-      const nightType = vcfg.night_type ?? globalCfg.night_type;
-      const nightValue = Number((vcfg.night_value ?? globalCfg.night_value) || 0);
-
-      if (night) {
-        if (nightType === "PERCENT") total = subtotal * (1 + nightValue / 100);
-        if (nightType === "FIXED") total = subtotal + nightValue;
-      }
-
-      total = Math.floor(total);
+      const pricing = transferPriceEquivalent({
+        distance_km: distKm,
+        is_night: night,
+        vehicleCfg: {
+          transfer_base_fare: vcfg.transfer_base_fare,
+          transfer_rate_per_km: vcfg.transfer_rate_per_km,
+          transfer_free_km: vcfg.transfer_free_km,
+          transfer_minimum_fare: vcfg.transfer_minimum_fare,
+          night_type: vcfg.night_type ?? globalCfg.night_type,
+          night_value: vcfg.night_value ?? globalCfg.night_value,
+        },
+      });
 
       const start = pickup;
       const end = new Date(start.getTime() + 60 * 60 * 1000);
@@ -398,18 +471,23 @@ module.exports = async (req, res) => {
 
       const conflicts = await findConflicts(blockStart.toISOString(), blockEnd.toISOString());
       if (conflicts.length) {
-        return res.status(200).json({ ok: true, available: false, message: "No Vehicles Available" });
+        return res.status(200).json({
+          ok: true,
+          available: false,
+          message: "No Vehicles Available",
+        });
       }
 
       const bookingId = crypto.randomUUID();
-
-      const nameCombined = `${(customer_first_name || "").trim()} ${(customer_last_name || "").trim()}`.trim();
+      const nameCombined =
+        `${(customer_first_name || "").trim()} ${(customer_last_name || "").trim()}`.trim();
 
       const flight = (arrival?.flight_number || "").trim();
       const vessel = (arrival?.vessel_name || "").trim();
 
       let arrival_type = "";
       let arrival_reference = "";
+
       if (flight) {
         arrival_type = "FLIGHT";
         arrival_reference = flight;
@@ -439,6 +517,9 @@ module.exports = async (req, res) => {
 
             pickup_place_id: pickup_place_id || "",
             dropoff_place_id: dropoff_place_id || "",
+            pickup_address: pickup_address || "",
+            dropoff_address: dropoff_address || "",
+
             distance_km: distKm,
             duration_min: durMin,
             vehicle: vehicleKey,
@@ -449,18 +530,23 @@ module.exports = async (req, res) => {
             arrival_reference,
 
             is_night: night ? true : false,
-            price_total_eur: total,
+            price_total_eur: pricing.total,
             price_breakdown_json: JSON.stringify({
-              base_fare: base,
-              free_km: freeKm,
-              extra_km: Math.round(extraKm * 10) / 10,
-              rate_per_km: rate,
-              distance_cost: Math.round(distanceCost * 100) / 100,
-              minimum_fare: minFare,
+              base_fare: Number(vcfg.transfer_base_fare || 0),
+              free_km: Number(vcfg.transfer_free_km || 0),
+              extra_km: Math.max(0, distKm - Number(vcfg.transfer_free_km || 0)),
+              rate_per_km: Number(vcfg.transfer_rate_per_km || 0),
+              distance_cost:
+                Math.round(
+                  Math.max(0, distKm - Number(vcfg.transfer_free_km || 0)) *
+                    Number(vcfg.transfer_rate_per_km || 0) *
+                    100
+                ) / 100,
+              minimum_fare: Number(vcfg.transfer_minimum_fare || 0),
               night_applied: night,
-              night_type: nightType,
-              night_value: nightValue,
-              subtotal: Math.round(subtotal * 100) / 100,
+              night_type: vcfg.night_type ?? globalCfg.night_type,
+              night_value: Number((vcfg.night_value ?? globalCfg.night_value) || 0),
+              subtotal: pricing.subtotal,
             }),
           },
         },
@@ -471,7 +557,7 @@ module.exports = async (req, res) => {
         available: true,
         hold_booking_id: bookingId,
         expires_at: expiresAt.toISOString(),
-        price_total_eur: total,
+        price_total_eur: pricing.total,
         vehicle: "Mercedes V-Class",
         is_night: night,
       });
