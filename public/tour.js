@@ -115,30 +115,33 @@ document.addEventListener("DOMContentLoaded", function () {
   window.showTourStep = showTourStep;
 
   function bindTourCards() {
-  const cards = document.querySelectorAll("[data-tour-card]");
+  document.addEventListener("click", function (e) {
+    const trigger = e.target.closest("[data-tour-card], [data-tour-select]");
+    if (!trigger) return;
 
-  cards.forEach((card) => {
-    card.style.cursor = "pointer";
+    e.preventDefault();
+    e.stopPropagation();
 
-    card.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
+    const card =
+      trigger.matches("[data-tour-card]")
+        ? trigger
+        : trigger.closest("[data-tour-card]") || trigger;
 
-      const st = ensureTourState();
+    const st = ensureTourState();
 
-      st.tour.tour_id = card.getAttribute("data-tour-id") || "";
-      st.tour.tour_name = card.getAttribute("data-tour-name") || "";
-      st.tour.duration = card.getAttribute("data-tour-duration") || "";
+    st.tour.tour_id = card.getAttribute("data-tour-id") || trigger.getAttribute("data-tour-id") || "";
+    st.tour.tour_name = card.getAttribute("data-tour-name") || trigger.getAttribute("data-tour-name") || "";
+    st.tour.duration = card.getAttribute("data-tour-duration") || trigger.getAttribute("data-tour-duration") || "";
 
-      document.querySelectorAll("[data-tour-card]").forEach((c) => {
-        c.classList.remove("is-selected");
-      });
-
-      card.classList.add("is-selected");
-
-      st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 2);
-      showTourStep(2);
+    document.querySelectorAll("[data-tour-card], [data-tour-select]").forEach((el) => {
+      el.classList.remove("is-selected");
     });
+
+    card.classList.add("is-selected");
+    if (trigger !== card) trigger.classList.add("is-selected");
+
+    st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 2);
+    showTourStep(2);
   });
 }
 
@@ -388,8 +391,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
   attachTourPlaces();
 
+function hydrateSelectedTourFromDom() {
+  const st = ensureTourState();
+  if (st.tour.tour_id) return;
+
+  const selected =
+    document.querySelector("[data-tour-card].is-selected") ||
+    document.querySelector("[data-tour-select].is-selected") ||
+    document.querySelector("[data-tour-card][data-tour-id]") ||
+    document.querySelector("[data-tour-select][data-tour-id]");
+
+  if (!selected) return;
+
+  st.tour.tour_id = selected.getAttribute("data-tour-id") || "";
+  st.tour.tour_name = selected.getAttribute("data-tour-name") || "";
+  st.tour.duration = selected.getAttribute("data-tour-duration") || "";
+}
+
   function validateTourStep2() {
     const st = ensureTourState();
+    hydrateSelectedTourFromDom();
 
     const dateVal = (tourDateInput?.value || "").trim();
     const timeVal = (tourTimeInput?.value || "").trim();
@@ -419,6 +440,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function requestTourQuote() {
     const st = ensureTourState();
+    hydrateSelectedTourFromDom();
 
     const dateVal = (tourDateInput?.value || "").trim();
     const timeVal = (tourTimeInput?.value || "").trim();
