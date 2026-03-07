@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-207");
+  console.log("TOUR JS VERSION 20260307-208");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -221,21 +221,23 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
 
   document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
     const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
-
     stepEl.classList.remove("is-completed", "is-active", "is-locked");
 
     if (stepNum < current) stepEl.classList.add("is-completed");
     if (stepNum === current) stepEl.classList.add("is-active");
     if (stepNum > maxReached) stepEl.classList.add("is-locked");
 
-    // always allow clicks on reachable steps
     stepEl.style.pointerEvents = stepNum <= maxReached ? "auto" : "none";
     stepEl.style.cursor = stepNum <= maxReached ? "pointer" : "default";
+    stepEl.style.position = "relative";
+    stepEl.style.zIndex = "10";
   });
 
   document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
     const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
     lineEl.classList.remove("is-completed");
+    lineEl.style.pointerEvents = "none";
+
     if (current >= lineNum) lineEl.classList.add("is-completed");
   });
 }
@@ -302,29 +304,27 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   function wireTourStepIndicatorClicks() {
-  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-    stepEl.style.cursor = "pointer";
-    stepEl.style.pointerEvents = "auto";
+  document.addEventListener("click", function (e) {
+    const stepEl = e.target.closest("[data-tour-step-indicator]");
+    if (!stepEl) return;
 
-    stepEl.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
 
-      const st = ensureTourState();
-      const maxReached = Number(st.tourMaxReachedStep || 1);
-      const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+    const st = ensureTourState();
+    const maxReached = Number(st.tourMaxReachedStep || 1);
+    const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
 
-      console.log("TOUR STEP CLICK", {
-        targetStep,
-        maxReached,
-        currentStep: st.tourCurrentStep
-      });
-
-      if (!targetStep) return;
-      if (targetStep > maxReached) return;
-
-      showTourStep(targetStep);
+    console.log("TOUR STEP CLICK", {
+      targetStep,
+      maxReached,
+      currentStep: st.tourCurrentStep
     });
+
+    if (!targetStep) return;
+    if (targetStep > maxReached) return;
+
+    showTourStep(targetStep);
   });
 }
 
