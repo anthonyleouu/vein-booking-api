@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-220");
+  console.log("TOUR JS VERSION 20260307-225");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -311,31 +311,33 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   function wireTourStepIndicatorClicks() {
-  document.addEventListener("click", function (e) {
-    const stepEl = e.target.closest("[data-tour-step-indicator]");
-    if (!stepEl) return;
+  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+    stepEl.style.cursor = "pointer";
 
-    e.preventDefault();
-    e.stopPropagation();
+    stepEl.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
 
-    const st = ensureTourState();
-    const currentStep = Number(st.tourCurrentStep || 1);
-    const maxReached = Math.max(
-      Number(st.tourMaxReachedStep || 1),
-      currentStep
-    );
-    const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+      const st = ensureTourState();
+      const currentStep = Number(st.tourCurrentStep || 1);
+      const maxReached = Math.max(
+        Number(st.tourMaxReachedStep || 1),
+        currentStep
+      );
 
-    console.log("TOUR STEP CLICK", {
-      targetStep,
-      currentStep,
-      maxReached
-    });
+      const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
 
-    if (!targetStep) return;
-    if (targetStep > maxReached) return;
+      console.log("TOUR STEP CLICK", {
+        targetStep,
+        currentStep,
+        maxReached
+      });
 
-    showTourStep(targetStep);
+      if (!targetStep) return;
+      if (targetStep > maxReached) return;
+
+      showTourStep(targetStep);
+    };
   });
 }
 
