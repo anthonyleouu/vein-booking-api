@@ -671,26 +671,32 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function applyTourDefaultRadios() {
+  const pickupRadios = document.querySelectorAll('[data-tour-pickup-mode]');
+  const dropoffRadios = document.querySelectorAll('[data-tour-dropoff-mode]');
+
   const pickupDefault = document.querySelector('[data-tour-pickup-mode="athens_center"]');
   const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="athens_center"]');
 
-  if (pickupDefault && !document.querySelector('[data-tour-pickup-mode]:checked')) {
-    pickupDefault.checked = true;
-  }
+  pickupRadios.forEach((radio) => {
+    radio.checked = false;
+  });
 
-  if (dropoffDefault && !document.querySelector('[data-tour-dropoff-mode]:checked')) {
-    dropoffDefault.checked = true;
-  }
+  dropoffRadios.forEach((radio) => {
+    radio.checked = false;
+  });
+
+  if (pickupDefault) pickupDefault.checked = true;
+  if (dropoffDefault) dropoffDefault.checked = true;
 
   const st = ensureTourState();
-  st.tour.pickup_mode = pickupDefault?.checked ? "athens_center" : (st.tour.pickup_mode || "athens_center");
-  st.tour.dropoff_mode = dropoffDefault?.checked ? "same_as_pickup" : (st.tour.dropoff_mode || "same_as_pickup");
+  st.tour.pickup_mode = "athens_center";
+  st.tour.dropoff_mode = "athens_center";
 }
 
 function setDefaultTourRadios() {
 
   const pickupDefault = document.querySelector('[data-tour-pickup-mode="athens_center"]');
-  const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="same_as_pickup"]');
+  const dropoffDefault = document.querySelector('[data-tour-dropoff-mode="athens_center"]');
 
   if (pickupDefault && !document.querySelector('[data-tour-pickup-mode]:checked')) {
     pickupDefault.checked = true;
