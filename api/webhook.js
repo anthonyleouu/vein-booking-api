@@ -3,13 +3,16 @@ const getRawBody = require("raw-body");
 const crypto = require("crypto");
 const { bookingsTable } = require("../lib/airtable");
 const { sendBookingEmails } = require("../lib/email");
+const {
+  buildTransferConfirmationEmail,
+  buildTourConfirmationEmail,
+} = require("../lib/email-templates");
 
 function sha256(input) {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
 
 module.exports = async (req, res) => {
-  // Stripe webhooks are POST only
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") return res.status(405).send("POST only");
 
@@ -17,6 +20,7 @@ module.exports = async (req, res) => {
     if (!process.env.STRIPE_SECRET_KEY) {
       return res.status(500).send("Missing STRIPE_SECRET_KEY");
     }
+
     if (!process.env.STRIPE_WEBHOOK_SECRET) {
       return res.status(500).send("Missing STRIPE_WEBHOOK_SECRET");
     }
@@ -28,7 +32,6 @@ module.exports = async (req, res) => {
       return res.status(400).send("Missing stripe-signature header");
     }
 
-    // raw-body reads the request stream (required for signature verification)
     const buf = await getRawBody(req);
 
     let event;
@@ -72,45 +75,51 @@ module.exports = async (req, res) => {
               fields: {
                 status: "CONFIRMED",
                 stripe_payment_intent_id: session.payment_intent || "",
+                stripe_session_id: session.id || "",
                 cancel_token_hash: tokenHash,
               },
             },
           ]);
 
-          // Build cancel link
-          const cancelBase =
-            process.env.CANCEL_LINK_BASE ||
-            "https://vein-booking-api.vercel.app/api/cancel";
-          const cancelLink = `${cancelBase}?token=${rawToken}`;
+          // Re-read latest booking state if needed later
+          const bookingData = {
+            booking_id: f.booking_id || bookingId,
+            service_type: f.service_type || "",
+            customer_name: f.customer_name || "",
+            customer_email: f.customer_email || "",
+            customer_phone: f.customer_phone || "",
+            start_time: f.start_time || "",
+            pickup_address: f.pickup_address || "",
+            dropoff_address: f.dropoff_address || "",
+            passengers: f.passengers || "",
+            luggage: f.luggage || "",
+            vehicle: f.vehicle || "Mercedes V-Class",
+            price_total_eur: f.price_total_eur || "",
+            tour_id: f.tour_id || "",
+            tour_name: f.tour_name || "",
+            extra_hours: f.extra_hours || "",
+          };
 
-          const subject = `Booking Confirmed (${bookingId})`;
+          let emailPayload = null;
 
-          const text =
-            `Your booking is confirmed ✅\n\n` +
-            `Booking ID: ${bookingId}\n` +
-            `Service: ${f.service_type || ""}\n` +
-            `Start: ${f.start_time || ""}\n` +
-            `Price: €${f.price_total_eur || ""}\n\n` +
-            `Cancellation (not allowed within 24h of start):\n${cancelLink}\n`;
+          if (bookingData.service_type === "TRANSFER") {
+            emailPayload = buildTransferConfirmationEmail(bookingData);
+          }
 
-          const html = `
-            <div style="font-family:Arial,sans-serif;line-height:1.4">
-              <h2>Booking Confirmed ✅</h2>
-              <p><b>Booking ID:</b> ${bookingId}</p>
-              <p><b>Service:</b> ${f.service_type || ""}</p>
-              <p><b>Start:</b> ${f.start_time || ""}</p>
-              <p><b>Price:</b> €${f.price_total_eur || ""}</p>
-              <p><b>Cancellation:</b> Not allowed within 24 hours of start time.</p>
-              <p><a href="${cancelLink}">Cancel booking</a></p>
-            </div>
-          `;
+          if (bookingData.service_type === "TOUR") {
+            emailPayload = buildTourConfirmationEmail(bookingData);
+          }
 
-          await sendBookingEmails({
-            toCustomer: f.customer_email || null,
-            subject,
-            html,
-            text,
-          });
+          if (emailPayload) {
+            await sendBookingEmails({
+              toCustomer: bookingData.customer_email || null,
+              subject: emailPayload.subject,
+              html: emailPayload.html,
+              text: emailPayload.text,
+            });
+          } else {
+            console.warn("No email template matched service_type:", bookingData.service_type);
+          }
         }
       }
     }
