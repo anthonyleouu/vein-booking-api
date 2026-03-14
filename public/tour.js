@@ -789,29 +789,38 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   if (nextTour2Btn) {
-    nextTour2Btn.addEventListener("click", async function (e) {
-      e.preventDefault();
+  nextTour2Btn.addEventListener("click", async function (e) {
+    e.preventDefault();
+    if (__tourQuoteLoading) return;
 
-      console.log("Current booking state before Step 2 validation:", window.__VEIN_BOOKING__);
+    const v = validateTourStep2();
+    if (!v.ok) {
+      alert(v.msg);
+      return;
+    }
 
-      const v = validateTourStep2();
-      if (!v.ok) {
-        alert(v.msg);
-        return;
-      }
+    try {
+      __tourQuoteLoading = true;
+      nextTour2Btn.disabled = true;
+      nextTour2Btn.style.opacity = "0.7";
+      nextTour2Btn.textContent = "Calculating...";
 
-      try {
-        const quote = await requestTourQuote();
-        const st = ensureTourState();
-        st.tour.quote = quote;
-        st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 3);
-        showTourStep(3);
-      } catch (err) {
-        console.error("TOUR QUOTE ERROR:", err);
-        alert("Could not calculate tour quote:\n" + (err?.message || String(err)));
-      }
-    });
-  }
+      const quote = await requestTourQuote();
+      const st = ensureTourState();
+      st.tour.quote = quote;
+      st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 3);
+      showTourStep(3);
+    } catch (err) {
+      console.error("TOUR QUOTE ERROR:", err);
+      alert("Could not calculate tour quote:\n" + (err?.message || String(err)));
+    } finally {
+      __tourQuoteLoading = false;
+      nextTour2Btn.disabled = false;
+      nextTour2Btn.style.opacity = "";
+      nextTour2Btn.textContent = "Next";
+    }
+  });
+}
 
   const tourFirstNameEl = document.querySelector('[data-field="tour.contact.first_name"]');
   const tourLastNameEl = document.querySelector('[data-field="tour.contact.last_name"]');
@@ -989,6 +998,7 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   let __tourItiInstance = null;
+  let __tourQuoteLoading = false;
 
   function forceTourDropdownScrollable() {
     const dd = document.querySelector(".iti__dropdown-content");
