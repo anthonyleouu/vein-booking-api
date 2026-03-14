@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260307-240");
+  console.log("TOUR JS VERSION 20260314-001");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -59,6 +59,15 @@ document.addEventListener("DOMContentLoaded", function () {
     el.textContent = v ? v : fallback;
   }
 
+  function setTextAll(selector, value, fallback = "-", root = document) {
+    const nodes = root.querySelectorAll(selector);
+    const finalValue =
+      value == null || String(value).trim() === "" ? fallback : String(value);
+    nodes.forEach((el) => {
+      el.textContent = finalValue;
+    });
+  }
+
   function formatDateTime(dateStr, timeStr) {
     if (!dateStr && !timeStr) return "-";
     if (dateStr && timeStr) return `${dateStr}, ${timeStr}`;
@@ -87,37 +96,39 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
 
-function getTourReviewRoot() {
-  return document.querySelector('[data-step="tour-4"]') || step4 || document;
-}
+  function getTourReviewRoots() {
+    const roots = Array.from(document.querySelectorAll('[data-step="tour-4"]'));
+    return roots.length ? roots : [document];
+  }
 
-function setSummaryText(summaryKey, value, fallback = "-") {
-  const root = getTourReviewRoot();
-  root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((el) => {
+  function setSummaryTextAll(summaryKey, value, fallback = "-") {
     const v = (value || "").toString().trim();
-    el.textContent = v ? v : fallback;
-  });
-}
+    getTourReviewRoots().forEach((root) => {
+      root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((el) => {
+        el.textContent = v ? v : fallback;
+      });
+    });
+  }
 
-function toggleSummaryBlockBySummaryKey(summaryKey, show) {
-  const root = document.querySelector('[data-step="tour-4"]') || step4 || document;
+  function toggleSummaryBlockAll(summaryKey, show) {
+    getTourReviewRoots().forEach((root) => {
+      root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((valueEl) => {
+        const block = valueEl.closest(".summary-block");
+        if (!block) return;
 
-  root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((valueEl) => {
-    const block = valueEl.closest(".summary-block");
-    if (!block) return;
-
-    if (show) {
-      block.style.removeProperty("display");
-      block.style.setProperty("display", "flex", "important");
-    } else {
-      block.style.setProperty("display", "none", "important");
-    }
-  });
-}
+        if (show) {
+          block.style.removeProperty("display");
+          block.style.setProperty("display", "flex", "important");
+        } else {
+          block.style.setProperty("display", "none", "important");
+        }
+      });
+    });
+  }
 
   function getAttrDeep(el, attrName) {
     if (!el) return "";
@@ -215,62 +226,56 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   const step4 = document.querySelector('[data-step="tour-4"]');
 
   function updateTourStepIndicator(tourStepCurrent) {
-  const st = ensureTourState();
-  const current = Number(tourStepCurrent || st.tourCurrentStep || 1);
-  const maxReached = Math.max(
-    Number(st.tourMaxReachedStep || 1),
-    current
-  );
+    const st = ensureTourState();
+    const current = Number(tourStepCurrent || st.tourCurrentStep || 1);
+    const maxReached = Math.max(Number(st.tourMaxReachedStep || 1), current);
 
-  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-    const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
-    stepEl.classList.remove("is-completed", "is-active", "is-locked");
+    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+      const stepNum = Number(stepEl.getAttribute("data-tour-step-indicator"));
+      stepEl.classList.remove("is-completed", "is-active", "is-locked");
 
-    if (stepNum < current) stepEl.classList.add("is-completed");
-    if (stepNum === current) stepEl.classList.add("is-active");
-    if (stepNum > maxReached) stepEl.classList.add("is-locked");
-  });
+      if (stepNum < current) stepEl.classList.add("is-completed");
+      if (stepNum === current) stepEl.classList.add("is-active");
+      if (stepNum > maxReached) stepEl.classList.add("is-locked");
+    });
 
-  document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
-    const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
-    lineEl.classList.remove("is-completed");
-    if (current >= lineNum) lineEl.classList.add("is-completed");
-  });
-}
-
-  function showTourStep(n) {
-  const st = ensureTourState();
-
-  n = Number(n || 1);
-
-  st.tourCurrentStep = n;
-  st.tourMaxReachedStep = Math.max(
-    Number(st.tourMaxReachedStep || 1),
-    n
-  );
-
-  if (step1) step1.style.display = n === 1 ? "block" : "none";
-  if (step2) step2.style.display = n === 2 ? "block" : "none";
-  if (step3) step3.style.display = n === 3 ? "block" : "none";
-  if (step4) step4.style.display = n === 4 ? "block" : "none";
-
-  updateTourStepIndicator(n);
-
-  if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
-
-  if (n === 4) {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        updateTourReviewSummary();
-      });
+    document.querySelectorAll("[data-tour-step-line]").forEach((lineEl) => {
+      const lineNum = Number(lineEl.getAttribute("data-tour-step-line"));
+      lineEl.classList.remove("is-completed");
+      if (current >= lineNum) lineEl.classList.add("is-completed");
     });
   }
 
-  console.log("TOUR STEP STATE", {
-    tourCurrentStep: st.tourCurrentStep,
-    tourMaxReachedStep: st.tourMaxReachedStep
-  });
-}
+  function showTourStep(n) {
+    const st = ensureTourState();
+
+    n = Number(n || 1);
+
+    st.tourCurrentStep = n;
+    st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), n);
+
+    if (step1) step1.style.display = n === 1 ? "block" : "none";
+    if (step2) step2.style.display = n === 2 ? "block" : "none";
+    if (step3) step3.style.display = n === 3 ? "block" : "none";
+    if (step4) step4.style.display = n === 4 ? "block" : "none";
+
+    updateTourStepIndicator(n);
+
+    if (n === 3) setTimeout(initTourPhoneInputOnce, 50);
+
+    if (n === 4) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          updateTourReviewSummary();
+        });
+      });
+    }
+
+    console.log("TOUR STEP STATE", {
+      tourCurrentStep: st.tourCurrentStep,
+      tourMaxReachedStep: st.tourMaxReachedStep,
+    });
+  }
 
   window.showTourStep = showTourStep;
 
@@ -285,7 +290,7 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
       if (!data.tour_id) {
         console.warn("Tour click detected, but no data-tour-id found.", {
           trigger,
-          root: data.root
+          root: data.root,
         });
         return;
       }
@@ -303,7 +308,7 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
       console.log("Selected tour:", {
         tour_id: st.tour.tour_id,
         tour_name: st.tour.tour_name,
-        duration: st.tour.duration
+        duration: st.tour.duration,
       });
 
       showTourStep(2);
@@ -311,35 +316,31 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   function wireTourStepIndicatorClicks() {
-  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-    stepEl.style.cursor = "pointer";
+    document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
+      stepEl.style.cursor = "pointer";
 
-    stepEl.onclick = function (e) {
-      e.preventDefault();
-      e.stopPropagation();
+      stepEl.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
 
-      const st = ensureTourState();
-      const currentStep = Number(st.tourCurrentStep || 1);
-      const maxReached = Math.max(
-        Number(st.tourMaxReachedStep || 1),
-        currentStep
-      );
+        const st = ensureTourState();
+        const currentStep = Number(st.tourCurrentStep || 1);
+        const maxReached = Math.max(Number(st.tourMaxReachedStep || 1), currentStep);
+        const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
 
-      const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
+        console.log("TOUR STEP CLICK", {
+          targetStep,
+          currentStep,
+          maxReached,
+        });
 
-      console.log("TOUR STEP CLICK", {
-        targetStep,
-        currentStep,
-        maxReached
-      });
+        if (!targetStep) return;
+        if (targetStep > maxReached) return;
 
-      if (!targetStep) return;
-      if (targetStep > maxReached) return;
-
-      showTourStep(targetStep);
-    };
-  });
-}
+        showTourStep(targetStep);
+      };
+    });
+  }
 
   const tourDateInput = document.querySelector('input[data-tour-picker="date"]');
   const tourTimeInput = document.querySelector('input[data-tour-picker="time"]');
@@ -387,15 +388,27 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   document.querySelectorAll("[data-counter]").forEach((btn) => {
-    btn.addEventListener("click", function () {
-      const field = this.getAttribute("data-field");
-      const type = this.getAttribute("data-counter");
-      const valueEl = document.querySelector(`[data-counter-value="${field}"]`);
-      const current = parseInt(valueEl?.textContent || "0", 10);
+    btn.addEventListener(
+      "click",
+      function (e) {
+        const field = this.getAttribute("data-field");
+        if (!limits[field]) return;
 
-      if (type === "plus") updateCounterValue(field, current + 1);
-      if (type === "minus") updateCounterValue(field, current - 1);
-    });
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === "function") {
+          e.stopImmediatePropagation();
+        }
+
+        const type = this.getAttribute("data-counter");
+        const valueEl = document.querySelector(`[data-counter-value="${field}"]`);
+        const current = parseInt(valueEl?.textContent || "0", 10);
+
+        if (type === "plus") updateCounterValue(field, current + 1);
+        if (type === "minus") updateCounterValue(field, current - 1);
+      },
+      true
+    );
   });
 
   updateCounterValue("tour.guests", 1);
@@ -476,7 +489,9 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
       dropoffAddressWrap.style.display =
         st.tour.dropoff_mode === "same_as_pickup"
           ? "none"
-          : (dropoffNeedsAddress ? "block" : "none");
+          : dropoffNeedsAddress
+          ? "block"
+          : "none";
     }
 
     if (st.tour.dropoff_mode === "same_as_pickup") {
@@ -498,12 +513,20 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
     setWebflowRadioChecked("[data-tour-dropoff-mode]", "athens_center");
 
     const st = ensureTourState();
-    st.tour.pickup_mode = getCheckedTourMode("[data-tour-pickup-mode]", "data-tour-pickup-mode", "athens_center");
-    st.tour.dropoff_mode = getCheckedTourMode("[data-tour-dropoff-mode]", "data-tour-dropoff-mode", "athens_center");
+    st.tour.pickup_mode = getCheckedTourMode(
+      "[data-tour-pickup-mode]",
+      "data-tour-pickup-mode",
+      "athens_center"
+    );
+    st.tour.dropoff_mode = getCheckedTourMode(
+      "[data-tour-dropoff-mode]",
+      "data-tour-dropoff-mode",
+      "athens_center"
+    );
 
     console.log("Applied default tour radio modes:", {
       pickup_mode: st.tour.pickup_mode,
-      dropoff_mode: st.tour.dropoff_mode
+      dropoff_mode: st.tour.dropoff_mode,
     });
   }
 
@@ -564,7 +587,7 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
 
     const options = {
       fields: ["place_id", "formatted_address", "geometry", "name"],
-      componentRestrictions: { country: ["gr"] }
+      componentRestrictions: { country: ["gr"] },
     };
 
     function storePlace(ac, inputEl, type) {
@@ -687,12 +710,12 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
       dropoff_mode: st.tour.dropoff_mode,
       dropoff_place_id:
         st.tour.dropoff_mode === "same_as_pickup"
-          ? (st.tour.pickup_place_id || "")
-          : (st.tour.dropoff_place_id || ""),
+          ? st.tour.pickup_place_id || ""
+          : st.tour.dropoff_place_id || "",
       dropoff_address:
         st.tour.dropoff_mode === "same_as_pickup"
-          ? (st.tour.pickup_address || (tourPickupInput?.value || "").trim())
-          : (st.tour.dropoff_address || (tourDropoffInput?.value || "").trim()),
+          ? st.tour.pickup_address || (tourPickupInput?.value || "").trim()
+          : st.tour.dropoff_address || (tourDropoffInput?.value || "").trim(),
     };
 
     const res = await fetch(TOUR_QUOTE_ENDPOINT, {
@@ -701,12 +724,28 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) {
+    const json = await res.json().catch(async () => {
       const text = await res.text().catch(() => "");
       throw new Error(text || "Tour quote request failed");
+    });
+
+    if (!res.ok) {
+      throw new Error(json?.error || json?.message || "Tour quote request failed");
     }
 
-    return res.json();
+    if (!json?.ok) {
+      throw new Error(json?.error || json?.message || "Tour quote failed");
+    }
+
+    if (!json?.available) {
+      throw new Error(json?.message || "No vehicles available");
+    }
+
+    if (!Number.isFinite(Number(json?.price_total_eur))) {
+      throw new Error("Tour quote returned without a valid price");
+    }
+
+    return json;
   }
 
   async function createTourHoldFromState() {
@@ -728,12 +767,12 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
       dropoff_mode: st.tour.dropoff_mode,
       dropoff_place_id:
         st.tour.dropoff_mode === "same_as_pickup"
-          ? (st.tour.pickup_place_id || "")
-          : (st.tour.dropoff_place_id || ""),
+          ? st.tour.pickup_place_id || ""
+          : st.tour.dropoff_place_id || "",
       dropoff_address:
         st.tour.dropoff_mode === "same_as_pickup"
-          ? (st.tour.pickup_address || (tourPickupInput?.value || ""))
-          : (st.tour.dropoff_address || (tourDropoffInput?.value || "")),
+          ? st.tour.pickup_address || (tourPickupInput?.value || "")
+          : st.tour.dropoff_address || (tourDropoffInput?.value || ""),
 
       customer_first_name: st.tourContact.first_name || "",
       customer_last_name: st.tourContact.last_name || "",
@@ -789,38 +828,38 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   if (nextTour2Btn) {
-  nextTour2Btn.addEventListener("click", async function (e) {
-    e.preventDefault();
-    if (__tourQuoteLoading) return;
+    nextTour2Btn.addEventListener("click", async function (e) {
+      e.preventDefault();
+      if (__tourQuoteLoading) return;
 
-    const v = validateTourStep2();
-    if (!v.ok) {
-      alert(v.msg);
-      return;
-    }
+      const v = validateTourStep2();
+      if (!v.ok) {
+        alert(v.msg);
+        return;
+      }
 
-    try {
-      __tourQuoteLoading = true;
-      nextTour2Btn.disabled = true;
-      nextTour2Btn.style.opacity = "0.7";
-      nextTour2Btn.textContent = "Calculating...";
+      try {
+        __tourQuoteLoading = true;
+        nextTour2Btn.disabled = true;
+        nextTour2Btn.style.opacity = "0.7";
+        nextTour2Btn.textContent = "Calculating...";
 
-      const quote = await requestTourQuote();
-      const st = ensureTourState();
-      st.tour.quote = quote;
-      st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 3);
-      showTourStep(3);
-    } catch (err) {
-      console.error("TOUR QUOTE ERROR:", err);
-      alert("Could not calculate tour quote:\n" + (err?.message || String(err)));
-    } finally {
-      __tourQuoteLoading = false;
-      nextTour2Btn.disabled = false;
-      nextTour2Btn.style.opacity = "";
-      nextTour2Btn.textContent = "Next";
-    }
-  });
-}
+        const quote = await requestTourQuote();
+        const st = ensureTourState();
+        st.tour.quote = quote;
+        st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 3);
+        showTourStep(3);
+      } catch (err) {
+        console.error("TOUR QUOTE ERROR:", err);
+        alert("Could not calculate tour quote:\n" + (err?.message || String(err)));
+      } finally {
+        __tourQuoteLoading = false;
+        nextTour2Btn.disabled = false;
+        nextTour2Btn.style.opacity = "";
+        nextTour2Btn.textContent = "Next";
+      }
+    });
+  }
 
   const tourFirstNameEl = document.querySelector('[data-field="tour.contact.first_name"]');
   const tourLastNameEl = document.querySelector('[data-field="tour.contact.last_name"]');
@@ -840,7 +879,9 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
     if (!fn || !ln) return { ok: false, msg: "Please enter first & last name." };
     if (!isValidEmail(em)) return { ok: false, msg: "Please enter a valid email." };
     if (!ph) return { ok: false, msg: "Please enter a phone number." };
-    if (!termsOk) return { ok: false, msg: "Please accept the Terms & Conditions & Privacy Policy." };
+    if (!termsOk) {
+      return { ok: false, msg: "Please accept the Terms & Conditions & Privacy Policy." };
+    }
 
     return { ok: true };
   }
@@ -869,7 +910,7 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
       st.tourContact.phone = (tourPhoneEl?.value || "").trim();
       st.tour.arrival = {
         flight_number: (tourFlightEl?.value || "").trim(),
-        vessel_name: (tourShipEl?.value || "").trim()
+        vessel_name: (tourShipEl?.value || "").trim(),
       };
 
       st.tourMaxReachedStep = Math.max(Number(st.tourMaxReachedStep || 1), 4);
@@ -878,82 +919,85 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   function updateTourReviewSummary() {
-  const st = ensureTourState();
-  const q = st.tour.quote || {};
-  const breakdown = q.price_breakdown || {};
+    const st = ensureTourState();
+    const q = st.tour.quote || {};
+    const breakdown = q.price_breakdown || {};
 
-  const root = document.querySelector('[data-step="tour-4"]') || step4 || document;
+    const dateVal = (tourDateInput?.value || "").trim();
+    const timeVal = (tourTimeInput?.value || "").trim();
 
-  const setSummaryText = (summaryKey, value, fallback = "-") => {
-    root.querySelectorAll(`[data-summary="${summaryKey}"]`).forEach((el) => {
-      const v = (value || "").toString().trim();
-      el.textContent = v ? v : fallback;
+    const effectiveDropoffMode =
+      st.tour.dropoff_mode === "same_as_pickup" ? st.tour.pickup_mode : st.tour.dropoff_mode;
+
+    const pickupText =
+      st.tour.pickup_mode === "airport" || st.tour.pickup_mode === "piraeus_port"
+        ? presetLabelForMode(st.tour.pickup_mode)
+        : st.tour.pickup_address || tourPickupInput?.value || "-";
+
+    const dropoffText =
+      st.tour.dropoff_mode === "same_as_pickup"
+        ? pickupText
+        : effectiveDropoffMode === "airport" || effectiveDropoffMode === "piraeus_port"
+        ? presetLabelForMode(effectiveDropoffMode)
+        : st.tour.dropoff_address || tourDropoffInput?.value || "-";
+
+    setSummaryTextAll("tour.name", st.tour.tour_name || "-");
+    setSummaryTextAll("tour.duration", st.tour.duration || "-");
+    setSummaryTextAll("tour.datetime", formatDateTime(dateVal, timeVal));
+    setSummaryTextAll("tour.guests", String(st.tour.passengers || 1));
+    setSummaryTextAll("tour.extra_hours", String(st.tour.extra_hours || 0));
+
+    setSummaryTextAll("tour.pickup_mode", presetLabelForMode(st.tour.pickup_mode));
+    setSummaryTextAll("tour.pickup", pickupText);
+
+    setSummaryTextAll(
+      "tour.dropoff_mode",
+      st.tour.dropoff_mode === "same_as_pickup"
+        ? "Same as Pickup"
+        : presetLabelForMode(st.tour.dropoff_mode)
+    );
+    setSummaryTextAll("tour.dropoff", dropoffText);
+
+    setSummaryTextAll("tour.first_name", st.tourContact.first_name || "-");
+    setSummaryTextAll("tour.last_name", st.tourContact.last_name || "-");
+    setSummaryTextAll("tour.email", st.tourContact.email || "-");
+    setSummaryTextAll("tour.phone", st.tourContact.phone || "-");
+
+    setSummaryTextAll("tour.total", q.price_total_eur != null ? `€${q.price_total_eur}` : "-");
+    setSummaryTextAll(
+      "tour.base_price",
+      breakdown.base != null ? `€${breakdown.base}` : "-"
+    );
+    setSummaryTextAll(
+      "tour.extra_hours_total",
+      breakdown.extra_hours_total != null ? `€${breakdown.extra_hours_total}` : "-"
+    );
+    setSummaryTextAll(
+      "tour.pickup_addon",
+      breakdown.pickup_addon != null ? `€${breakdown.pickup_addon}` : "-"
+    );
+    setSummaryTextAll(
+      "tour.dropoff_addon",
+      breakdown.dropoff_addon != null ? `€${breakdown.dropoff_addon}` : "-"
+    );
+
+    const extraHours = num(st.tour.extra_hours);
+    const extraHoursTotal = num(breakdown.extra_hours_total);
+    const pickupAddon = num(breakdown.pickup_addon);
+    const dropoffAddon = num(breakdown.dropoff_addon);
+
+    toggleSummaryBlockAll("tour.extra_hours", extraHours > 0);
+    toggleSummaryBlockAll("tour.extra_hours_total", extraHoursTotal > 0);
+    toggleSummaryBlockAll("tour.pickup_addon", pickupAddon > 0);
+    toggleSummaryBlockAll("tour.dropoff_addon", dropoffAddon > 0);
+
+    console.log("SUMMARY HIDE CHECK", {
+      extraHours,
+      extraHoursTotal,
+      pickupAddon,
+      dropoffAddon,
     });
-  };
-
-  const dateVal = (tourDateInput?.value || "").trim();
-  const timeVal = (tourTimeInput?.value || "").trim();
-
-  const effectiveDropoffMode =
-    st.tour.dropoff_mode === "same_as_pickup" ? st.tour.pickup_mode : st.tour.dropoff_mode;
-
-  const pickupText =
-    st.tour.pickup_mode === "airport" || st.tour.pickup_mode === "piraeus_port"
-      ? presetLabelForMode(st.tour.pickup_mode)
-      : (st.tour.pickup_address || tourPickupInput?.value || "-");
-
-  const dropoffText =
-    st.tour.dropoff_mode === "same_as_pickup"
-      ? pickupText
-      : (
-          effectiveDropoffMode === "airport" || effectiveDropoffMode === "piraeus_port"
-            ? presetLabelForMode(effectiveDropoffMode)
-            : (st.tour.dropoff_address || tourDropoffInput?.value || "-")
-        );
-
-  setSummaryText("tour.name", st.tour.tour_name || "-");
-  setSummaryText("tour.duration", st.tour.duration || "-");
-  setSummaryText("tour.datetime", formatDateTime(dateVal, timeVal));
-  setSummaryText("tour.guests", String(st.tour.passengers || 1));
-  setSummaryText("tour.extra_hours", String(st.tour.extra_hours || 0));
-
-  setSummaryText("tour.pickup_mode", presetLabelForMode(st.tour.pickup_mode));
-  setSummaryText("tour.pickup", pickupText);
-
-  setSummaryText(
-    "tour.dropoff_mode",
-    st.tour.dropoff_mode === "same_as_pickup" ? "Same as Pickup" : presetLabelForMode(st.tour.dropoff_mode)
-  );
-  setSummaryText("tour.dropoff", dropoffText);
-
-  setSummaryText("tour.first_name", st.tourContact.first_name || "-");
-  setSummaryText("tour.last_name", st.tourContact.last_name || "-");
-  setSummaryText("tour.email", st.tourContact.email || "-");
-  setSummaryText("tour.phone", st.tourContact.phone || "-");
-
-  setSummaryText("tour.total", q.price_total_eur != null ? `€${q.price_total_eur}` : "-");
-  setSummaryText("tour.base_price", breakdown.base != null ? `€${breakdown.base}` : "-");
-  setSummaryText("tour.extra_hours_total", breakdown.extra_hours_total != null ? `€${breakdown.extra_hours_total}` : "-");
-  setSummaryText("tour.pickup_addon", breakdown.pickup_addon != null ? `€${breakdown.pickup_addon}` : "-");
-  setSummaryText("tour.dropoff_addon", breakdown.dropoff_addon != null ? `€${breakdown.dropoff_addon}` : "-");
-
-  const extraHours = num(st.tour.extra_hours);
-  const extraHoursTotal = num(breakdown.extra_hours_total);
-  const pickupAddon = num(breakdown.pickup_addon);
-  const dropoffAddon = num(breakdown.dropoff_addon);
-
-  toggleSummaryBlockBySummaryKey("tour.extra_hours", extraHours > 0);
-  toggleSummaryBlockBySummaryKey("tour.extra_hours_total", extraHoursTotal > 0);
-  toggleSummaryBlockBySummaryKey("tour.pickup_addon", pickupAddon > 0);
-  toggleSummaryBlockBySummaryKey("tour.dropoff_addon", dropoffAddon > 0);
-
-  console.log("SUMMARY HIDE CHECK", {
-    extraHours,
-    extraHoursTotal,
-    pickupAddon,
-    dropoffAddon
-  });
-}
+  }
 
   if (backTour4Btn) {
     backTour4Btn.addEventListener("click", function (e) {
@@ -1027,16 +1071,20 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
       initialCountry: "gr",
       separateDialCode: true,
       nationalMode: true,
-      dropdownContainer: document.body
+      dropdownContainer: document.body,
     });
 
     forceTourDropdownScrollable();
     phoneInput.addEventListener("open:countrydropdown", forceTourDropdownScrollable);
 
-    document.addEventListener("wheel", (e) => {
-      const inside = e.target.closest(".iti__country-list, .iti__dropdown-content, .iti__dropdown");
-      if (inside) e.stopPropagation();
-    }, { passive: true, capture: true });
+    document.addEventListener(
+      "wheel",
+      (e) => {
+        const inside = e.target.closest(".iti__country-list, .iti__dropdown-content, .iti__dropdown");
+        if (inside) e.stopPropagation();
+      },
+      { passive: true, capture: true }
+    );
 
     phoneInput.addEventListener("blur", function () {
       if (!phoneInput.value.trim()) return;
@@ -1046,10 +1094,19 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   }
 
   console.log("TOUR LOADED");
-  console.log("tour step indicators:", document.querySelectorAll("[data-tour-step-indicator]").length);
+  console.log(
+    "tour step indicators:",
+    document.querySelectorAll("[data-tour-step-indicator]").length
+  );
   console.log("tour step lines:", document.querySelectorAll("[data-tour-step-line]").length);
-  console.log("tour dropoff athens radios:", document.querySelectorAll('[data-tour-dropoff-mode="athens_center"]').length);
-  console.log("tour dropoff same_as_pickup radios:", document.querySelectorAll('[data-tour-dropoff-mode="same_as_pickup"]').length);
+  console.log(
+    "tour dropoff athens radios:",
+    document.querySelectorAll('[data-tour-dropoff-mode="athens_center"]').length
+  );
+  console.log(
+    "tour dropoff same_as_pickup radios:",
+    document.querySelectorAll('[data-tour-dropoff-mode="same_as_pickup"]').length
+  );
 
   const st = ensureTourState();
   st.tourMaxReachedStep = Number(st.tourMaxReachedStep || 1);
@@ -1063,34 +1120,7 @@ function toggleSummaryBlockBySummaryKey(summaryKey, show) {
   showTourStep(Number(st.tourCurrentStep || 1));
 
   setTimeout(() => {
-  document.querySelectorAll("[data-tour-step-indicator]").forEach((stepEl) => {
-    stepEl.style.cursor = "pointer";
-
-    stepEl.onclick = function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const st = ensureTourState();
-      const currentStep = Number(st.tourCurrentStep || 1);
-      const maxReached = Math.max(
-        Number(st.tourMaxReachedStep || 1),
-        currentStep
-      );
-      const targetStep = Number(stepEl.getAttribute("data-tour-step-indicator"));
-
-      console.log("TOUR STEP CLICK", {
-        targetStep,
-        currentStep,
-        maxReached
-      });
-
-      if (!targetStep) return;
-      if (targetStep > maxReached) return;
-
-      showTourStep(targetStep);
-    };
-  });
-
-  console.log("TOUR STEP HANDLERS ATTACHED");
-}, 300);
+    wireTourStepIndicatorClicks();
+    console.log("TOUR STEP HANDLERS ATTACHED");
+  }, 300);
 });
