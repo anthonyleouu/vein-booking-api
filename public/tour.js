@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("TOUR JS VERSION 20260314-001");
+  console.log("TOUR JS VERSION 20260514-001-live");
 
   function state() {
     window.__VEIN_BOOKING__ = window.__VEIN_BOOKING__ || {};
@@ -216,9 +216,12 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  const TOUR_QUOTE_ENDPOINT = "https://vein-booking-api.vercel.app/api/quote";
-  const TOUR_HOLD_ENDPOINT = "https://vein-booking-api.vercel.app/api/hold";
-  const TOUR_CHECKOUT_ENDPOINT = "https://vein-booking-api.vercel.app/api/checkout";
+  // Allow Webflow to override the API base via window.SELENE_API_BASE.
+  // Falls back to the Vercel deployment URL so existing setups still work.
+  const SELENE_API_BASE = (window.SELENE_API_BASE || "https://vein-booking-api.vercel.app").replace(/\/+$/, "");
+  const TOUR_QUOTE_ENDPOINT = `${SELENE_API_BASE}/api/quote`;
+  const TOUR_HOLD_ENDPOINT = `${SELENE_API_BASE}/api/hold`;
+  const TOUR_CHECKOUT_ENDPOINT = `${SELENE_API_BASE}/api/checkout`;
 
   const step1 = document.querySelector('[data-step="tour-1"]');
   const step2 = document.querySelector('[data-step="tour-2"]');

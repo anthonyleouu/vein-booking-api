@@ -2,14 +2,43 @@ const Stripe = require("stripe");
 const getRawBody = require("raw-body");
 const crypto = require("crypto");
 const { bookingsTable } = require("../lib/airtable");
+const { escapeFormulaValue } = require("../lib/airtable-escape");
 const { sendBookingEmails } = require("../lib/email");
 const {
   buildTransferConfirmationEmail,
   buildTourConfirmationEmail,
 } = require("../lib/email-templates");
 
+// CRITICAL: Stripe webhooks require the raw, unmodified request body in order
+// to verify the signature. Vercel's default JSON body parser would mutate the
+// payload and break verification. This config disables it for THIS endpoint
+// only. Without it, live webhooks may fail intermittently under load.
+module.exports.config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 function sha256(input) {
   return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function getPublicBaseUrl() {
+  // Used to build the customer-facing cancel link inserted into the email.
+  // PUBLIC_BASE_URL should be the live website root (e.g. https://selenelux.co).
+  return (
+    process.env.PUBLIC_BASE_URL ||
+    "https://selenelux.co"
+  ).replace(/\/+$/, "");
+}
+
+function getApiBaseUrl() {
+  // Used to build the /api/cancel link the customer clicks from their email.
+  // API_BASE_URL should be the Vercel deployment URL of this API.
+  return (
+    process.env.API_BASE_URL ||
+    "https://vein-booking-api.vercel.app"
+  ).replace(/\/+$/, "");
 }
 
 module.exports = async (req, res) => {
@@ -25,7 +54,11 @@ module.exports = async (req, res) => {
       return res.status(500).send("Missing STRIPE_WEBHOOK_SECRET");
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      // Pin the API version explicitly so Stripe never silently upgrades the
+      // behaviour of our integration. Bump intentionally during maintenance.
+      apiVersion: "2024-06-20",
+    });
 
     const sig = req.headers["stripe-signature"];
     if (!sig) {
@@ -57,7 +90,7 @@ module.exports = async (req, res) => {
         const records = await bookingsTable()
           .select({
             maxRecords: 1,
-            filterByFormula: `{booking_id}='${bookingId}'`,
+            filterByFormula: `{booking_id}='${escapeFormulaValue(bookingId)}'`,
           })
           .firstPage();
 
@@ -65,7 +98,17 @@ module.exports = async (req, res) => {
           const rec = records[0];
           const f = rec.fields;
 
-          // Generate cancel token (raw) + store only hash
+          // ---- IDEMPOTENCY ----
+          // Stripe retries webhooks aggressively. If this booking is already
+          // CONFIRMED, just acknowledge and move on. Without this guard a
+          // network blip during the email send would cause Stripe to retry
+          // and the customer would receive duplicate confirmation emails.
+          if (f.status === "CONFIRMED") {
+            console.log("Webhook idempotent skip — already CONFIRMED:", bookingId);
+            return res.status(200).json({ received: true, idempotent: true });
+          }
+
+          // Generate cancel token (raw) + store only hash.
           const rawToken = crypto.randomBytes(32).toString("hex");
           const tokenHash = sha256(rawToken);
 
@@ -81,7 +124,8 @@ module.exports = async (req, res) => {
             },
           ]);
 
-          // Re-read latest booking state if needed later
+          const cancelUrl = `${getApiBaseUrl()}/api/cancel?token=${rawToken}`;
+
           const bookingData = {
             booking_id: f.booking_id || bookingId,
             service_type: f.service_type || "",
@@ -98,6 +142,8 @@ module.exports = async (req, res) => {
             tour_id: f.tour_id || "",
             tour_name: f.tour_name || "",
             extra_hours: f.extra_hours || "",
+            cancel_url: cancelUrl,
+            site_url: getPublicBaseUrl(),
           };
 
           let emailPayload = null;
@@ -111,16 +157,29 @@ module.exports = async (req, res) => {
           }
 
           if (emailPayload) {
-            await sendBookingEmails({
-              toCustomer: bookingData.customer_email || null,
-              subject: emailPayload.subject,
-              html: emailPayload.html,
-              text: emailPayload.text,
-            });
+            try {
+              await sendBookingEmails({
+                toCustomer: bookingData.customer_email || null,
+                subject: emailPayload.subject,
+                html: emailPayload.html,
+                text: emailPayload.text,
+              });
+            } catch (emailErr) {
+              // Booking IS confirmed (payment was successful + Airtable
+              // updated). Email is best-effort. Log it but return 200 so
+              // Stripe doesn't retry and double-confirm. The admin still
+              // sees the booking in Airtable and Stripe; we can resend
+              // the email manually from there.
+              console.error("Email send failed (booking still confirmed):", emailErr.message);
+            }
           } else {
             console.warn("No email template matched service_type:", bookingData.service_type);
           }
+        } else {
+          console.warn("Webhook: booking not found for id:", bookingId);
         }
+      } else {
+        console.warn("Webhook: checkout.session.completed missing booking_id metadata");
       }
     }
 

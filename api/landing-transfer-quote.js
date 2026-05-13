@@ -1,4 +1,6 @@
 const { configTable } = require("../lib/airtable");
+const { applyCors } = require("../lib/cors");
+const { escapeFormulaValue } = require("../lib/airtable-escape");
 
 const CACHE_TTL_MS = 60 * 1000;
 const _cache = new Map();
@@ -55,7 +57,7 @@ async function getVehicleConfig(vehicleKey) {
   if (cached) return cached;
 
   const rows = await configTable()
-    .select({ maxRecords: 1, filterByFormula: `{key}='${vehicleKey}'` })
+    .select({ maxRecords: 1, filterByFormula: `{key}='${escapeFormulaValue(vehicleKey)}'` })
     .firstPage();
 
   if (!rows.length) throw new Error(`Config row ${vehicleKey} missing`);
@@ -92,26 +94,7 @@ async function getDistanceMetrics({ originPlaceId, destinationPlaceId, serverKey
 }
 
 module.exports = async (req, res) => {
-  const allowedOrigins = [
-    "https://vip-athens-transfer.webflow.io",
-    "https://veindigital.co",
-    "https://www.veindigital.co",
-    "https://selenelux.co",
-    "https://www.selenelux.co",
-  ];
-
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
+  if (applyCors(req, res)) return;
 
   const startedAt = Date.now();
 

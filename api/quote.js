@@ -1,4 +1,6 @@
 const { configTable, toursTable } = require("../lib/airtable");
+const { applyCors } = require("../lib/cors");
+const { escapeFormulaValue } = require("../lib/airtable-escape");
 const { findConflicts } = require("../lib/availability");
 const { tourPrice, isNightPickup, transferPrice } = require("../lib/pricing");
 
@@ -57,7 +59,7 @@ async function getVehicleConfig(vehicleKey) {
   if (cached) return cached;
 
   const rows = await configTable()
-    .select({ maxRecords: 1, filterByFormula: `{key}='${vehicleKey}'` })
+    .select({ maxRecords: 1, filterByFormula: `{key}='${escapeFormulaValue(vehicleKey)}'` })
     .firstPage();
 
   if (!rows.length) throw new Error(`Config row ${vehicleKey} missing`);
@@ -70,7 +72,7 @@ async function getTourById(tourId) {
   if (cached) return cached;
 
   const rows = await toursTable()
-    .select({ maxRecords: 1, filterByFormula: `{tour_id}='${tourId}'` })
+    .select({ maxRecords: 1, filterByFormula: `{tour_id}='${escapeFormulaValue(tourId)}'` })
     .firstPage();
 
   if (!rows.length) throw new Error("Tour not found");
@@ -150,24 +152,7 @@ async function getCustomTourAddon({ customPlaceId, homePlaceId, serverKey, vehic
 }
 
 module.exports = async (req, res) => {
-  const allowedOrigins = [
-    "https://vip-athens-transfer.webflow.io",
-    "https://veindigital.co",
-    "https://www.veindigital.co",
-  ];
-
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
+  if (applyCors(req, res, { methods: "POST, OPTIONS, GET" })) return;
 
   const startedAt = Date.now();
 
@@ -190,7 +175,7 @@ module.exports = async (req, res) => {
     }
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const { service_type } = body;
+    const { service_type } = body || {};
 
     if (!service_type) {
       return res.status(400).json({ ok: false, error: "service_type required" });
@@ -260,9 +245,7 @@ module.exports = async (req, res) => {
         requestedDropoffMode === "same_as_pickup" ? pickupMode : requestedDropoffMode;
 
       const effectiveDropoffPlaceId =
-        requestedDropoffMode === "same_as_pickup"
-          ? (pickup_place_id || "")
-          : (dropoff_place_id || "");
+        requestedDropoffMode === "same_as_pickup" ? (pickup_place_id || "") : (dropoff_place_id || "");
 
       const effectiveDropoffAddress =
         requestedDropoffMode === "same_as_pickup"

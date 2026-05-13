@@ -1,5 +1,7 @@
 const crypto = require("crypto");
 const { configTable, toursTable, bookingsTable } = require("../lib/airtable");
+const { applyCors } = require("../lib/cors");
+const { escapeFormulaValue } = require("../lib/airtable-escape");
 const { findConflicts } = require("../lib/availability");
 const { tourPrice, isNightPickup } = require("../lib/pricing");
 
@@ -108,23 +110,7 @@ async function getCustomTourAddon({ customPlaceId, homePlaceId, serverKey, vehic
 }
 
 module.exports = async (req, res) => {
-  const allowedOrigins = [
-    "https://vip-athens-transfer.webflow.io",
-    // "https://veindigital.co",
-  ];
-
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
+  if (applyCors(req, res)) return;
 
   try {
     if (req.method !== "POST") {
@@ -132,7 +118,7 @@ module.exports = async (req, res) => {
     }
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const { service_type } = body;
+    const { service_type } = body || {};
 
     if (!service_type) {
       return res.status(400).json({ ok: false, error: "service_type required" });
@@ -239,7 +225,7 @@ module.exports = async (req, res) => {
       }
 
       const tourRows = await toursTable()
-        .select({ maxRecords: 1, filterByFormula: `{tour_id}='${tour_id}'` })
+        .select({ maxRecords: 1, filterByFormula: `{tour_id}='${escapeFormulaValue(tour_id)}'` })
         .firstPage();
 
       if (!tourRows.length) {
@@ -428,7 +414,7 @@ module.exports = async (req, res) => {
       const vehicleKey = (vehicle || "vclass").toString().trim() || "vclass";
 
       const vehicleRows = await configTable()
-        .select({ maxRecords: 1, filterByFormula: `{key}='${vehicleKey}'` })
+        .select({ maxRecords: 1, filterByFormula: `{key}='${escapeFormulaValue(vehicleKey)}'` })
         .firstPage();
 
       if (!vehicleRows.length) {
@@ -565,6 +551,7 @@ module.exports = async (req, res) => {
 
     return res.status(400).json({ ok: false, error: "Unknown service_type" });
   } catch (err) {
+    console.error("HOLD ERROR:", err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 };
