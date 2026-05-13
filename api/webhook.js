@@ -124,8 +124,6 @@ module.exports = async (req, res) => {
             },
           ]);
 
-          const cancelUrl = `${getApiBaseUrl()}/api/cancel?token=${rawToken}`;
-
           const bookingData = {
             booking_id: f.booking_id || bookingId,
             service_type: f.service_type || "",
@@ -142,7 +140,6 @@ module.exports = async (req, res) => {
             tour_id: f.tour_id || "",
             tour_name: f.tour_name || "",
             extra_hours: f.extra_hours || "",
-            cancel_url: cancelUrl,
             site_url: getPublicBaseUrl(),
           };
 
