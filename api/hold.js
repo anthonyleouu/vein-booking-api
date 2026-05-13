@@ -381,7 +381,7 @@ module.exports = async (req, res) => {
         hold_booking_id: bookingId,
         expires_at: expiresAt.toISOString(),
         price_total_eur: pricing.total,
-        vehicle: "Mercedes V-Class",
+        vehicle: "Mercedes Vito",
       });
     }
 
@@ -544,7 +544,7 @@ module.exports = async (req, res) => {
         hold_booking_id: bookingId,
         expires_at: expiresAt.toISOString(),
         price_total_eur: pricing.total,
-        vehicle: "Mercedes V-Class",
+        vehicle: "Mercedes Vito",
         is_night: night,
       });
     }

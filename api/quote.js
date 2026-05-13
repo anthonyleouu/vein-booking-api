@@ -351,7 +351,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({
         ok: true,
         available: true,
-        vehicle: "Mercedes V-Class",
+        vehicle: "Mercedes Vito",
         price_total_eur: pricing.total,
         price_breakdown: {
           ...pricing.breakdown,
@@ -463,7 +463,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({
         ok: true,
         available: true,
-        vehicle: "Mercedes V-Class",
+        vehicle: "Mercedes Vito",
         vehicle_key: vehicleKey,
         is_night: night,
         distance_km,

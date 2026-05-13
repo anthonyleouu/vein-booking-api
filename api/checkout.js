@@ -85,7 +85,7 @@ module.exports = async (req, res) => {
     const productName =
       f.service_type === "TOUR"
         ? `Tour Booking - ${f.tour_name || "Private Tour"}`
-        : `${f.service_type || "Booking"} - Mercedes V-Class`;
+        : `${f.service_type || "Booking"} - Mercedes Vito`;
 
     const session = await stripe.checkout.sessions.create(
       {

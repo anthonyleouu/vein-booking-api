@@ -170,7 +170,7 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       ok: true,
-      vehicle: "Mercedes V-Class",
+      vehicle: "Mercedes Vito",
       vehicle_key: vehicleKey,
       is_night: night,
       distance_km,

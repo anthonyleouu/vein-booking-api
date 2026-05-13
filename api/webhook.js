@@ -135,7 +135,7 @@ module.exports = async (req, res) => {
             dropoff_address: f.dropoff_address || "",
             passengers: f.passengers || "",
             luggage: f.luggage || "",
-            vehicle: f.vehicle || "Mercedes V-Class",
+            vehicle: f.vehicle || "Mercedes Vito",
             price_total_eur: f.price_total_eur || "",
             tour_id: f.tour_id || "",
             tour_name: f.tour_name || "",
