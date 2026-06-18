@@ -61,8 +61,21 @@ function transferPriceEquivalent({ distance_km, is_night, vehicleCfg }) {
   const freeKm = Number(vehicleCfg.transfer_free_km || 0);
   const minFare = Number(vehicleCfg.transfer_minimum_fare || 0);
 
-  const extraKm = Math.max(0, Number(distance_km || 0) - freeKm);
-  const distanceCost = extraKm * rate;
+  // Optional tiered long-distance pricing.
+  const tierBreakKm = Number(vehicleCfg.transfer_tier_break_km || 0);
+  const rateLong = Number(vehicleCfg.transfer_rate_per_km_long || 0);
+
+  const km = Number(distance_km || 0);
+  const extraKm = Math.max(0, km - freeKm);
+
+  let distanceCost;
+  if (tierBreakKm > 0 && rateLong > 0 && km > tierBreakKm) {
+    const tier1Km = Math.max(0, tierBreakKm - freeKm);
+    const tier2Km = km - tierBreakKm;
+    distanceCost = (tier1Km * rate) + (tier2Km * rateLong);
+  } else {
+    distanceCost = extraKm * rate;
+  }
 
   let subtotal = base + distanceCost;
   if (minFare > 0) subtotal = Math.max(minFare, subtotal);
@@ -441,6 +454,8 @@ module.exports = async (req, res) => {
           transfer_rate_per_km: vcfg.transfer_rate_per_km,
           transfer_free_km: vcfg.transfer_free_km,
           transfer_minimum_fare: vcfg.transfer_minimum_fare,
+          transfer_tier_break_km: vcfg.transfer_tier_break_km,
+          transfer_rate_per_km_long: vcfg.transfer_rate_per_km_long,
           night_type: vcfg.night_type ?? globalCfg.night_type,
           night_value: vcfg.night_value ?? globalCfg.night_value,
         },
@@ -517,23 +532,45 @@ module.exports = async (req, res) => {
 
             is_night: night ? true : false,
             price_total_eur: pricing.total,
-            price_breakdown_json: JSON.stringify({
-              base_fare: Number(vcfg.transfer_base_fare || 0),
-              free_km: Number(vcfg.transfer_free_km || 0),
-              extra_km: Math.max(0, distKm - Number(vcfg.transfer_free_km || 0)),
-              rate_per_km: Number(vcfg.transfer_rate_per_km || 0),
-              distance_cost:
-                Math.round(
-                  Math.max(0, distKm - Number(vcfg.transfer_free_km || 0)) *
-                    Number(vcfg.transfer_rate_per_km || 0) *
-                    100
-                ) / 100,
-              minimum_fare: Number(vcfg.transfer_minimum_fare || 0),
-              night_applied: night,
-              night_type: vcfg.night_type ?? globalCfg.night_type,
-              night_value: Number((vcfg.night_value ?? globalCfg.night_value) || 0),
-              subtotal: pricing.subtotal,
-            }),
+            price_breakdown_json: JSON.stringify((() => {
+              const base = Number(vcfg.transfer_base_fare || 0);
+              const rate = Number(vcfg.transfer_rate_per_km || 0);
+              const freeKm = Number(vcfg.transfer_free_km || 0);
+              const tierBreakKm = Number(vcfg.transfer_tier_break_km || 0);
+              const rateLong = Number(vcfg.transfer_rate_per_km_long || 0);
+              const km = Number(distKm || 0);
+              const extraKm = Math.max(0, km - freeKm);
+
+              let tierApplied = false;
+              let tier1Km = extraKm;
+              let tier2Km = 0;
+              let distanceCost = extraKm * rate;
+
+              if (tierBreakKm > 0 && rateLong > 0 && km > tierBreakKm) {
+                tier1Km = Math.max(0, tierBreakKm - freeKm);
+                tier2Km = km - tierBreakKm;
+                distanceCost = (tier1Km * rate) + (tier2Km * rateLong);
+                tierApplied = true;
+              }
+
+              return {
+                base_fare: base,
+                free_km: freeKm,
+                extra_km: Math.round(extraKm * 100) / 100,
+                rate_per_km: rate,
+                rate_per_km_long: rateLong || null,
+                tier_break_km: tierBreakKm || null,
+                tier_applied: tierApplied,
+                tier_1_km: Math.round(tier1Km * 100) / 100,
+                tier_2_km: Math.round(tier2Km * 100) / 100,
+                distance_cost: Math.round(distanceCost * 100) / 100,
+                minimum_fare: Number(vcfg.transfer_minimum_fare || 0),
+                night_applied: night,
+                night_type: vcfg.night_type ?? globalCfg.night_type,
+                night_value: Number((vcfg.night_value ?? globalCfg.night_value) || 0),
+                subtotal: pricing.subtotal,
+              };
+            })()),
           },
         },
       ]);

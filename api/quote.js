@@ -418,8 +418,25 @@ module.exports = async (req, res) => {
       const freeKm = Number(vcfg.transfer_free_km || 0);
       const minFare = Number(vcfg.transfer_minimum_fare || 0);
 
+      // Optional tiered long-distance pricing.
+      const tierBreakKm = Number(vcfg.transfer_tier_break_km || 0);
+      const rateLong = Number(vcfg.transfer_rate_per_km_long || 0);
+
       const extraKm = Math.max(0, distance_km - freeKm);
-      const distanceCost = extraKm * rate;
+
+      let distanceCost;
+      let tierApplied = false;
+      let tier1Km = extraKm;
+      let tier2Km = 0;
+
+      if (tierBreakKm > 0 && rateLong > 0 && distance_km > tierBreakKm) {
+        tier1Km = Math.max(0, tierBreakKm - freeKm);
+        tier2Km = distance_km - tierBreakKm;
+        distanceCost = (tier1Km * rate) + (tier2Km * rateLong);
+        tierApplied = true;
+      } else {
+        distanceCost = extraKm * rate;
+      }
 
       let subtotal = base + distanceCost;
       if (minFare > 0) subtotal = Math.max(minFare, subtotal);
@@ -474,6 +491,11 @@ module.exports = async (req, res) => {
           free_km: freeKm,
           extra_km: Math.round(extraKm * 10) / 10,
           rate_per_km: rate,
+          rate_per_km_long: rateLong || null,
+          tier_break_km: tierBreakKm || null,
+          tier_applied: tierApplied,
+          tier_1_km: Math.round(tier1Km * 10) / 10,
+          tier_2_km: Math.round(tier2Km * 10) / 10,
           distance_cost: Math.round(distanceCost * 100) / 100,
           minimum_fare: minFare,
           night_applied: night,
