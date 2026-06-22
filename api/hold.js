@@ -1,9 +1,64 @@
 const crypto = require("crypto");
-const { configTable, toursTable, bookingsTable } = require("../lib/airtable");
+const { configTable, toursTable, bookingsTable, zonesTable, routePricingTable } = require("../lib/airtable");
 const { applyCors } = require("../lib/cors");
 const { escapeFormulaValue } = require("../lib/airtable-escape");
 const { findConflicts } = require("../lib/availability");
-const { tourPrice, isNightPickup } = require("../lib/pricing");
+const { tourPrice, isNightPickup, findMatchingZone, findMatchingRoute, zoneBasedTransferPrice } = require("../lib/pricing");
+
+const CACHE_TTL_MS = 60 * 1000;
+const _cache = new Map();
+
+function getCache(key) {
+  const hit = _cache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    _cache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function setCache(key, value, ttlMs = CACHE_TTL_MS) {
+  _cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  return value;
+}
+
+async function geocodePlaceId(placeId, serverKey) {
+  const cacheKey = `geocode:${placeId}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
+  const url =
+    "https://maps.googleapis.com/maps/api/geocode/json" +
+    `?place_id=${encodeURIComponent(placeId)}` +
+    `&key=${encodeURIComponent(serverKey)}`;
+
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.status !== "OK" || !json.results?.[0]) return null;
+    const loc = json.results[0].geometry.location;
+    const geo = { lat: loc.lat, lng: loc.lng };
+    return setCache(cacheKey, geo, 3600 * 1000);
+  } catch (err) {
+    console.error("GEOCODE_FAILED", { place_id: placeId, error: err.message });
+    return null;
+  }
+}
+
+async function getAllZones() {
+  const cached = getCache("zones:all");
+  if (cached) return cached;
+  const rows = await zonesTable().select().all();
+  return setCache("zones:all", rows.map((r) => r.fields));
+}
+
+async function getAllRoutes() {
+  const cached = getCache("routes:all");
+  if (cached) return cached;
+  const rows = await routePricingTable().select().all();
+  return setCache("routes:all", rows.map((r) => r.fields));
+}
 
 function presetAddressForMode(mode) {
   if (mode === "airport") return "Athens International Airport";
@@ -446,20 +501,110 @@ module.exports = async (req, res) => {
       const durMin =
         typeof duration_min === "number" ? duration_min : Number(duration_min || 0) || 0;
 
-      const pricing = transferPriceEquivalent({
-        distance_km: distKm,
-        is_night: night,
-        vehicleCfg: {
-          transfer_base_fare: vcfg.transfer_base_fare,
-          transfer_rate_per_km: vcfg.transfer_rate_per_km,
-          transfer_free_km: vcfg.transfer_free_km,
-          transfer_minimum_fare: vcfg.transfer_minimum_fare,
-          transfer_tier_break_km: vcfg.transfer_tier_break_km,
-          transfer_rate_per_km_long: vcfg.transfer_rate_per_km_long,
-          night_type: vcfg.night_type ?? globalCfg.night_type,
-          night_value: vcfg.night_value ?? globalCfg.night_value,
-        },
-      });
+      const nightTypeCfg = vcfg.night_type ?? globalCfg.night_type;
+      const nightValueCfg = Number((vcfg.night_value ?? globalCfg.night_value) || 0);
+
+      // Geocode for zone matching (non-fatal)
+      const serverKey = process.env.GOOGLE_MAPS_SERVER_KEY;
+      let pickupGeo = null;
+      let dropoffGeo = null;
+      if (serverKey && pickup_place_id && dropoff_place_id) {
+        [pickupGeo, dropoffGeo] = await Promise.all([
+          geocodePlaceId(pickup_place_id, serverKey),
+          geocodePlaceId(dropoff_place_id, serverKey),
+        ]);
+      }
+
+      let zones = [];
+      let routes = [];
+      try {
+        [zones, routes] = await Promise.all([getAllZones(), getAllRoutes()]);
+      } catch (err) {
+        console.error("ZONE_LOOKUP_FAILED", { error: err.message });
+      }
+
+      let finalTotal;
+      let breakdownObj;
+
+      let usedZonePricing = false;
+      if (pickupGeo && dropoffGeo && zones.length > 0) {
+        const pickupZone = findMatchingZone(pickupGeo.lat, pickupGeo.lng, zones);
+        const dropoffZone = findMatchingZone(dropoffGeo.lat, dropoffGeo.lng, zones);
+
+        if (pickupZone && dropoffZone) {
+          const matchedRoute = findMatchingRoute(pickupZone.zone_id, dropoffZone.zone_id, routes);
+          if (matchedRoute) {
+            const zonePricing = zoneBasedTransferPrice({
+              distance_km: distKm,
+              is_night: night,
+              route: matchedRoute,
+              vehicleCfg: vcfg,
+              globalCfg,
+            });
+            finalTotal = zonePricing.total;
+            breakdownObj = zonePricing.breakdown;
+            usedZonePricing = true;
+          }
+        }
+      }
+
+      if (!usedZonePricing) {
+        const pricing = transferPriceEquivalent({
+          distance_km: distKm,
+          is_night: night,
+          vehicleCfg: {
+            transfer_base_fare: vcfg.transfer_base_fare,
+            transfer_rate_per_km: vcfg.transfer_rate_per_km,
+            transfer_free_km: vcfg.transfer_free_km,
+            transfer_minimum_fare: vcfg.transfer_minimum_fare,
+            transfer_tier_break_km: vcfg.transfer_tier_break_km,
+            transfer_rate_per_km_long: vcfg.transfer_rate_per_km_long,
+            night_type: nightTypeCfg,
+            night_value: nightValueCfg,
+          },
+        });
+
+        finalTotal = pricing.total;
+
+        const base = Number(vcfg.transfer_base_fare || 0);
+        const rate = Number(vcfg.transfer_rate_per_km || 0);
+        const freeKm = Number(vcfg.transfer_free_km || 0);
+        const tierBreakKm = Number(vcfg.transfer_tier_break_km || 0);
+        const rateLong = Number(vcfg.transfer_rate_per_km_long || 0);
+        const km = Number(distKm || 0);
+        const extraKm = Math.max(0, km - freeKm);
+
+        let tierApplied = false;
+        let tier1Km = extraKm;
+        let tier2Km = 0;
+        let distanceCost = extraKm * rate;
+
+        if (tierBreakKm > 0 && rateLong > 0 && km > tierBreakKm) {
+          tier1Km = Math.max(0, tierBreakKm - freeKm);
+          tier2Km = km - tierBreakKm;
+          distanceCost = (tier1Km * rate) + (tier2Km * rateLong);
+          tierApplied = true;
+        }
+
+        breakdownObj = {
+          pricing_source: "formula",
+          base_fare: base,
+          free_km: freeKm,
+          extra_km: Math.round(extraKm * 100) / 100,
+          rate_per_km: rate,
+          rate_per_km_long: rateLong || null,
+          tier_break_km: tierBreakKm || null,
+          tier_applied: tierApplied,
+          tier_1_km: Math.round(tier1Km * 100) / 100,
+          tier_2_km: Math.round(tier2Km * 100) / 100,
+          distance_cost: Math.round(distanceCost * 100) / 100,
+          minimum_fare: Number(vcfg.transfer_minimum_fare || 0),
+          night_applied: night,
+          night_type: nightTypeCfg,
+          night_value: nightValueCfg,
+          subtotal: pricing.subtotal,
+        };
+      }
 
       const start = pickup;
       const end = new Date(start.getTime() + 60 * 60 * 1000);
@@ -531,46 +676,8 @@ module.exports = async (req, res) => {
             arrival_reference,
 
             is_night: night ? true : false,
-            price_total_eur: pricing.total,
-            price_breakdown_json: JSON.stringify((() => {
-              const base = Number(vcfg.transfer_base_fare || 0);
-              const rate = Number(vcfg.transfer_rate_per_km || 0);
-              const freeKm = Number(vcfg.transfer_free_km || 0);
-              const tierBreakKm = Number(vcfg.transfer_tier_break_km || 0);
-              const rateLong = Number(vcfg.transfer_rate_per_km_long || 0);
-              const km = Number(distKm || 0);
-              const extraKm = Math.max(0, km - freeKm);
-
-              let tierApplied = false;
-              let tier1Km = extraKm;
-              let tier2Km = 0;
-              let distanceCost = extraKm * rate;
-
-              if (tierBreakKm > 0 && rateLong > 0 && km > tierBreakKm) {
-                tier1Km = Math.max(0, tierBreakKm - freeKm);
-                tier2Km = km - tierBreakKm;
-                distanceCost = (tier1Km * rate) + (tier2Km * rateLong);
-                tierApplied = true;
-              }
-
-              return {
-                base_fare: base,
-                free_km: freeKm,
-                extra_km: Math.round(extraKm * 100) / 100,
-                rate_per_km: rate,
-                rate_per_km_long: rateLong || null,
-                tier_break_km: tierBreakKm || null,
-                tier_applied: tierApplied,
-                tier_1_km: Math.round(tier1Km * 100) / 100,
-                tier_2_km: Math.round(tier2Km * 100) / 100,
-                distance_cost: Math.round(distanceCost * 100) / 100,
-                minimum_fare: Number(vcfg.transfer_minimum_fare || 0),
-                night_applied: night,
-                night_type: vcfg.night_type ?? globalCfg.night_type,
-                night_value: Number((vcfg.night_value ?? globalCfg.night_value) || 0),
-                subtotal: pricing.subtotal,
-              };
-            })()),
+            price_total_eur: finalTotal,
+            price_breakdown_json: JSON.stringify(breakdownObj),
           },
         },
       ]);
@@ -580,7 +687,7 @@ module.exports = async (req, res) => {
         available: true,
         hold_booking_id: bookingId,
         expires_at: expiresAt.toISOString(),
-        price_total_eur: pricing.total,
+        price_total_eur: finalTotal,
         vehicle: "Mercedes Vito",
         is_night: night,
       });

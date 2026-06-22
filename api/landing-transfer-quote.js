@@ -1,6 +1,7 @@
-const { configTable } = require("../lib/airtable");
+const { configTable, zonesTable, routePricingTable } = require("../lib/airtable");
 const { applyCors } = require("../lib/cors");
 const { escapeFormulaValue } = require("../lib/airtable-escape");
+const { findMatchingZone, findMatchingRoute, zoneBasedTransferPrice } = require("../lib/pricing");
 
 const CACHE_TTL_MS = 60 * 1000;
 const _cache = new Map();
@@ -62,6 +63,42 @@ async function getVehicleConfig(vehicleKey) {
 
   if (!rows.length) throw new Error(`Config row ${vehicleKey} missing`);
   return setCache(cacheKey, rows[0].fields);
+}
+
+async function geocodePlaceId(placeId, serverKey) {
+  const cacheKey = `geocode:${placeId}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
+  const url =
+    "https://maps.googleapis.com/maps/api/geocode/json" +
+    `?place_id=${encodeURIComponent(placeId)}` +
+    `&key=${encodeURIComponent(serverKey)}`;
+
+  try {
+    const { json } = await fetchJsonWithTimeout(url, {}, 8000);
+    if (json.status !== "OK" || !json.results?.[0]) return null;
+    const loc = json.results[0].geometry.location;
+    const geo = { lat: loc.lat, lng: loc.lng };
+    return setCache(cacheKey, geo, 3600 * 1000);
+  } catch (err) {
+    console.error("GEOCODE_FAILED", { place_id: placeId, error: err.message });
+    return null;
+  }
+}
+
+async function getAllZones() {
+  const cached = getCache("zones:all");
+  if (cached) return cached;
+  const rows = await zonesTable().select().all();
+  return setCache("zones:all", rows.map((r) => r.fields));
+}
+
+async function getAllRoutes() {
+  const cached = getCache("routes:all");
+  if (cached) return cached;
+  const rows = await routePricingTable().select().all();
+  return setCache("routes:all", rows.map((r) => r.fields));
 }
 
 async function getDistanceMetrics({ originPlaceId, destinationPlaceId, serverKey }) {
@@ -128,15 +165,67 @@ module.exports = async (req, res) => {
     const globalCfg = await getGlobalConfig();
     const vcfg = await getVehicleConfig(vehicleKey);
 
-    const metrics = await getDistanceMetrics({
-      originPlaceId: pickup_place_id,
-      destinationPlaceId: dropoff_place_id,
-      serverKey,
-    });
+    const night = !!night_transfer;
+    const nightType = vcfg.night_type ?? globalCfg.night_type;
+    const nightValue = Number((vcfg.night_value ?? globalCfg.night_value) || 0);
+
+    const [metrics, pickupGeo, dropoffGeo] = await Promise.all([
+      getDistanceMetrics({ originPlaceId: pickup_place_id, destinationPlaceId: dropoff_place_id, serverKey }),
+      geocodePlaceId(pickup_place_id, serverKey),
+      geocodePlaceId(dropoff_place_id, serverKey),
+    ]);
 
     const distance_km = metrics.distance_km;
     const duration_min = metrics.duration_min;
 
+    // Zone-based pricing attempt
+    let zones = [];
+    let routes = [];
+    try {
+      [zones, routes] = await Promise.all([getAllZones(), getAllRoutes()]);
+    } catch (err) {
+      console.error("ZONE_LOOKUP_FAILED", { error: err.message });
+    }
+
+    if (pickupGeo && dropoffGeo && zones.length > 0) {
+      const pickupZone = findMatchingZone(pickupGeo.lat, pickupGeo.lng, zones);
+      const dropoffZone = findMatchingZone(dropoffGeo.lat, dropoffGeo.lng, zones);
+
+      if (pickupZone && dropoffZone) {
+        const matchedRoute = findMatchingRoute(pickupZone.zone_id, dropoffZone.zone_id, routes);
+
+        if (matchedRoute) {
+          const zonePricing = zoneBasedTransferPrice({
+            distance_km,
+            is_night: night,
+            route: matchedRoute,
+            vehicleCfg: vcfg,
+            globalCfg,
+          });
+
+          console.log("LANDING TRANSFER QUOTE OK", {
+            pickup_place_id,
+            dropoff_place_id,
+            night,
+            pricing_source: "zone_route",
+            elapsed_ms: Date.now() - startedAt,
+          });
+
+          return res.status(200).json({
+            ok: true,
+            vehicle: "Mercedes Vito",
+            vehicle_key: vehicleKey,
+            is_night: night,
+            distance_km,
+            duration_min,
+            price_total_eur: zonePricing.total,
+            price_breakdown: zonePricing.breakdown,
+          });
+        }
+      }
+    }
+
+    // Formula fallback
     const base = Number(vcfg.transfer_base_fare || 0);
     const rate = Number(vcfg.transfer_rate_per_km || 0);
     const freeKm = Number(vcfg.transfer_free_km || 0);
@@ -167,10 +256,6 @@ module.exports = async (req, res) => {
 
     let total = subtotal;
 
-    const night = !!night_transfer;
-    const nightType = vcfg.night_type ?? globalCfg.night_type;
-    const nightValue = Number((vcfg.night_value ?? globalCfg.night_value) || 0);
-
     if (night) {
       if (nightType === "PERCENT") total = subtotal * (1 + nightValue / 100);
       if (nightType === "FIXED") total = subtotal + nightValue;
@@ -182,6 +267,7 @@ module.exports = async (req, res) => {
       pickup_place_id,
       dropoff_place_id,
       night,
+      pricing_source: "formula",
       elapsed_ms: Date.now() - startedAt,
     });
 
@@ -194,6 +280,7 @@ module.exports = async (req, res) => {
       duration_min,
       price_total_eur: total,
       price_breakdown: {
+        pricing_source: "formula",
         base_fare: base,
         free_km: freeKm,
         extra_km: Math.round(extraKm * 10) / 10,
