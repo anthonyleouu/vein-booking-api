@@ -5,6 +5,7 @@ const { escapeFormulaValue } = require("../lib/airtable-escape");
 const { findConflicts } = require("../lib/availability");
 const { tourPrice, isNightPickup, findMatchingZone, findMatchingRoute, zoneBasedTransferPrice } = require("../lib/pricing");
 const { normalizePhone } = require("../lib/phone-format");
+const { normalizePlaceName } = require("../lib/place-normalize");
 
 const CACHE_TTL_MS = 60 * 1000;
 const _cache = new Map();
@@ -423,10 +424,10 @@ module.exports = async (req, res) => {
             dropoff_mode: requestedDropoffMode,
 
             pickup_place_id: pickup_place_id || "",
-            pickup_address: pickup_address || presetAddressForMode(pickupMode),
+            pickup_address: normalizePlaceName(pickup_address || presetAddressForMode(pickupMode)),
 
             dropoff_place_id: effectiveDropoffPlaceId || "",
-            dropoff_address: effectiveDropoffAddress || "",
+            dropoff_address: normalizePlaceName(effectiveDropoffAddress || ""),
 
             pickup_addon_eur: pickupAddon,
             dropoff_addon_eur: dropoffAddon,
@@ -664,8 +665,8 @@ module.exports = async (req, res) => {
 
             pickup_place_id: pickup_place_id || "",
             dropoff_place_id: dropoff_place_id || "",
-            pickup_address: pickup_address || "",
-            dropoff_address: dropoff_address || "",
+            pickup_address: normalizePlaceName(pickup_address || ""),
+            dropoff_address: normalizePlaceName(dropoff_address || ""),
 
             distance_km: distKm,
             duration_min: durMin,
