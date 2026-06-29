@@ -4,6 +4,7 @@ const { applyCors } = require("../lib/cors");
 const { escapeFormulaValue } = require("../lib/airtable-escape");
 const { findConflicts } = require("../lib/availability");
 const { tourPrice, isNightPickup, findMatchingZone, findMatchingRoute, zoneBasedTransferPrice } = require("../lib/pricing");
+const { normalizePhone } = require("../lib/phone-format");
 
 const CACHE_TTL_MS = 60 * 1000;
 const _cache = new Map();
@@ -410,7 +411,7 @@ module.exports = async (req, res) => {
 
             customer_name: nameCombined || "",
             customer_email: customer_email || "",
-            customer_phone: customer_phone || "",
+            customer_phone: normalizePhone(customer_phone, process.env.DEFAULT_PHONE_COUNTRY_CODE || "30"),
 
             tour_id: tour_id,
             tour_name: tour.tour_name || "",
@@ -659,7 +660,7 @@ module.exports = async (req, res) => {
 
             customer_name: nameCombined || "",
             customer_email: customer_email || "",
-            customer_phone: customer_phone || "",
+            customer_phone: normalizePhone(customer_phone, process.env.DEFAULT_PHONE_COUNTRY_CODE || "30"),
 
             pickup_place_id: pickup_place_id || "",
             dropoff_place_id: dropoff_place_id || "",

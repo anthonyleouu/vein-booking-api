@@ -141,6 +141,13 @@ module.exports = async (req, res) => {
             tour_name: f.tour_name || "",
             extra_hours: f.extra_hours || "",
             site_url: getPublicBaseUrl(),
+            stripe_payment_intent_id: session.payment_intent || "",
+            distance_km: f.distance_km || "",
+            duration_min: f.duration_min || "",
+            arrival_type: f.arrival_type || "",
+            arrival_reference: f.arrival_reference || "",
+            pickup_mode: f.pickup_mode || "",
+            dropoff_mode: f.dropoff_mode || "",
           };
 
           let emailPayload = null;
@@ -160,6 +167,7 @@ module.exports = async (req, res) => {
                 subject: emailPayload.subject,
                 html: emailPayload.html,
                 text: emailPayload.text,
+                bookingData,
               });
             } catch (emailErr) {
               // Booking IS confirmed (payment was successful + Airtable
