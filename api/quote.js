@@ -100,14 +100,15 @@ function getAthensMinutes(dateObj) {
 }
 
 async function geocodePlaceId(placeId, serverKey) {
-  const cacheKey = `geocode:${placeId}`;
+  const cacheKey = `geocode:en:${placeId}`;
   const cached = getCache(cacheKey);
   if (cached) return cached;
 
   const url =
     "https://maps.googleapis.com/maps/api/geocode/json" +
     `?place_id=${encodeURIComponent(placeId)}` +
-    `&key=${encodeURIComponent(serverKey)}`;
+    `&key=${encodeURIComponent(serverKey)}` +
+    "&language=en";
 
   try {
     const { json } = await fetchJsonWithTimeout(url, {}, 8000);
