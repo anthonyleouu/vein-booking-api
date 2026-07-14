@@ -101,6 +101,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function showChauffeurStep(n) {
     const st = state();
     st.currentStep = n;
+    setTextAll('[data-summary="service"]', 'Chauffeur');
     st.maxReachedStep = Math.max(Number(st.maxReachedStep || 2), n);
     const uiN = chauffeurStepToUiStep(n);
     st.uiMaxReachedStep = Math.max(Number(st.uiMaxReachedStep || 1), uiN);
@@ -446,6 +447,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const st = state();
 
     setTextAll('[data-summary="chauffeur.pickup"]', normalizePlaceName(pickupInput?.dataset?.address || pickupInput?.value) || "-");
+    setTextAll('[data-summary="service"]', 'Chauffeur');
 
     const d = dateInput ? dateInput.value.trim() : "";
     const t = timeInput ? timeInput.value.trim() : "";
