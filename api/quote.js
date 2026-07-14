@@ -2,7 +2,9 @@ const { configTable, toursTable, zonesTable, routePricingTable } = require("../l
 const { applyCors } = require("../lib/cors");
 const { escapeFormulaValue } = require("../lib/airtable-escape");
 const { findConflicts } = require("../lib/availability");
-const { tourPrice, isNightPickup, transferPrice, findMatchingZone, findMatchingRoute, zoneBasedTransferPrice } = require("../lib/pricing");
+const { tourPrice, isNightPickup, transferPrice, findMatchingZone, findMatchingRoute, zoneBasedTransferPrice, chauffeurPrice } = require("../lib/pricing");
+
+const CHAUFFEUR_ALLOWED_DURATIONS = [3, 4, 5, 6, 8, 10];
 
 const CACHE_TTL_MS = 60 * 1000; // 1 minute
 const _cache = new Map();
@@ -589,6 +591,81 @@ module.exports = async (req, res) => {
           night_value: nightValue,
           subtotal: Math.round(subtotal * 100) / 100,
         },
+      });
+    }
+
+    // ---------------- CHAUFFEUR QUOTE ----------------
+    if (service_type === "CHAUFFEUR") {
+      const { pickup_datetime_iso, pickup_place_id, duration_hours } = body;
+
+      if (!pickup_datetime_iso) {
+        return res.status(400).json({ ok: false, error: "pickup_datetime_iso required" });
+      }
+
+      if (!pickup_place_id) {
+        return res.status(400).json({ ok: false, error: "pickup_place_id required" });
+      }
+
+      const durationHours = Number(duration_hours);
+      if (!Number.isInteger(durationHours) || !CHAUFFEUR_ALLOWED_DURATIONS.includes(durationHours)) {
+        return res.status(400).json({
+          ok: false,
+          error: `duration_hours must be one of ${CHAUFFEUR_ALLOWED_DURATIONS.join(", ")}`,
+        });
+      }
+
+      const vehicleKey = "vclass";
+      const globalCfg = await getGlobalConfig();
+      const vcfg = await getVehicleConfig(vehicleKey);
+
+      const minHours = Number(vcfg.chauffeur_min_hours || 0);
+      if (durationHours < minHours) {
+        return res.status(400).json({
+          ok: false,
+          error: `duration_hours must be at least ${minHours}`,
+        });
+      }
+
+      const pickup = new Date(pickup_datetime_iso);
+
+      const nightStart = Number(globalCfg.night_start_hour ?? vcfg.night_start_hour ?? 0);
+      const nightEnd = Number(globalCfg.night_end_hour ?? vcfg.night_end_hour ?? 6);
+      const night = isNightPickup(pickup, nightStart, nightEnd);
+
+      const pricing = chauffeurPrice({
+        duration_hours: durationHours,
+        is_night: night,
+        vehicleCfg: vcfg,
+        globalCfg,
+      });
+
+      const start = pickup;
+      const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+      const bufferBefore = Number(globalCfg.transfer_buffer_before_min ?? 0);
+      const bufferAfter = Number(globalCfg.transfer_buffer_after_min ?? 0);
+      const blockStart = new Date(start.getTime() - bufferBefore * 60 * 1000);
+      const blockEnd = new Date(end.getTime() + bufferAfter * 60 * 1000);
+
+      const conflicts = await findConflicts(blockStart.toISOString(), blockEnd.toISOString());
+      if (conflicts.length) {
+        return res.status(200).json({ ok: true, available: false, message: "No Vehicles Available" });
+      }
+
+      console.log("QUOTE CHAUFFEUR OK", {
+        pickup_place_id,
+        duration_hours: durationHours,
+        elapsed_ms: Date.now() - startedAt,
+      });
+
+      return res.status(200).json({
+        ok: true,
+        available: true,
+        vehicle: "Mercedes Vito",
+        vehicle_key: vehicleKey,
+        is_night: night,
+        duration_hours: durationHours,
+        price_total_eur: pricing.total,
+        price_breakdown: pricing.breakdown,
       });
     }
 

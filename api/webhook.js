@@ -7,6 +7,7 @@ const { sendBookingEmails } = require("../lib/email");
 const {
   buildTransferConfirmationEmail,
   buildTourConfirmationEmail,
+  buildChauffeurConfirmationEmail,
 } = require("../lib/email-templates");
 
 // CRITICAL: Stripe webhooks require the raw, unmodified request body in order
@@ -148,6 +149,7 @@ module.exports = async (req, res) => {
             arrival_reference: f.arrival_reference || "",
             pickup_mode: f.pickup_mode || "",
             dropoff_mode: f.dropoff_mode || "",
+            duration_hours: f.duration_hours || "",
           };
 
           let emailPayload = null;
@@ -158,6 +160,10 @@ module.exports = async (req, res) => {
 
           if (bookingData.service_type === "TOUR") {
             emailPayload = buildTourConfirmationEmail(bookingData);
+          }
+
+          if (bookingData.service_type === "CHAUFFEUR") {
+            emailPayload = buildChauffeurConfirmationEmail(bookingData);
           }
 
           if (emailPayload) {
