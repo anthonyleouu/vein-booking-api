@@ -5,6 +5,21 @@ document.addEventListener("DOMContentLoaded", function () {
   const HOLD_ENDPOINT = `${API_BASE}/api/hold`;
   const CHECKOUT_ENDPOINT = `${API_BASE}/api/checkout`;
 
+  // Initialize intl-tel-input on the chauffeur phone input (separate from transfer's)
+  window.__chauffeurItiInstance = null;
+  function initChauffeurPhone() {
+    const chauffeurRoot = document.querySelector('.chauffeur_flow');
+    const phoneInput = chauffeurRoot?.querySelector('#chauffeur_contact_phone');
+    if (!phoneInput || !window.intlTelInput) return;
+    if (window.__chauffeurItiInstance) return;
+    window.__chauffeurItiInstance = window.intlTelInput(phoneInput, {
+      initialCountry: "gr",
+      separateDialCode: true,
+      nationalMode: true,
+      dropdownContainer: document.body
+    });
+  }
+
   // =========================
   // STATE
   // =========================
@@ -98,6 +113,7 @@ document.addEventListener("DOMContentLoaded", function () {
     updateStepIndicator(n);
 
     if (n === 3) renderQuote(state().quote || {});
+    if (n === 4) setTimeout(initChauffeurPhone, 50);
     if (n === 5) updateReviewSummary();
   }
 
@@ -357,11 +373,12 @@ document.addEventListener("DOMContentLoaded", function () {
   // =========================
   const backStep4Btn = document.querySelector('[data-action="back-chauffeur-4"]');
   const nextStep4Btn = document.querySelector('[data-action="next-chauffeur-4"]');
-  const firstNameEl = document.querySelector('[data-field="contact.first_name"]');
-  const lastNameEl = document.querySelector('[data-field="contact.last_name"]');
-  const emailEl = document.querySelector('[data-field="contact.email"]');
-  const phoneEl = document.getElementById("contact_phone");
-  const termsEl = document.getElementById("accept_terms");
+  const chauffeurRoot = document.querySelector('.chauffeur_flow');
+  const firstNameEl = chauffeurRoot?.querySelector('[data-field="contact.first_name"]');
+  const lastNameEl = chauffeurRoot?.querySelector('[data-field="contact.last_name"]');
+  const emailEl = chauffeurRoot?.querySelector('[data-field="contact.email"]');
+  const phoneEl = chauffeurRoot?.querySelector('#chauffeur_contact_phone');
+  const termsEl = chauffeurRoot?.querySelector('#accept_terms_chauffeur');
 
   function isValidEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim()); }
 
@@ -388,7 +405,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // Build full E164 phone (same pattern as transfer flow)
       let fullPhone = "";
-      const iti = window.__itiInstance || null;
+      const iti = window.__chauffeurItiInstance || null;
       if (iti && phoneEl && phoneEl.value.trim()) {
         try {
           const country = iti.getSelectedCountryData();
@@ -413,8 +430,8 @@ document.addEventListener("DOMContentLoaded", function () {
         phone: fullPhone || (phoneEl?.value || "").trim()
       };
 
-      const flight = (document.querySelector('[data-field="arrival.flight_number"]')?.value || "").trim();
-      const vessel = (document.querySelector('[data-field="arrival.vessel_name"]')?.value || "").trim();
+      const flight = (chauffeurRoot?.querySelector('[data-field="arrival.flight_number"]')?.value || "").trim();
+      const vessel = (chauffeurRoot?.querySelector('[data-field="arrival.vessel_name"]')?.value || "").trim();
       st.arrival = { flight_number: flight, vessel_name: vessel };
 
       st.maxReachedStep = Math.max(Number(st.maxReachedStep || 2), 5);
