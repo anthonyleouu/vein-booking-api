@@ -139,13 +139,20 @@ document.addEventListener("DOMContentLoaded", function () {
   const dateInput = document.querySelector('input[data-picker="chauffeur-date"]');
   const timeInput = document.querySelector('input[data-picker="chauffeur-time"]');
 
+  const isMobile = window.matchMedia("(max-width: 767px)").matches;
+
   if (window.flatpickr) {
     flatpickr('input[data-picker="chauffeur-date"]', {
       dateFormat: "Y-m-d",
       minDate: "today",
       disableMobile: true
     });
+  }
 
+  if (timeInput && isMobile) {
+    timeInput.setAttribute("type", "time");
+    // Do not call flatpickr on this input
+  } else if (window.flatpickr) {
     flatpickr('input[data-picker="chauffeur-time"]', {
       enableTime: true,
       noCalendar: true,
