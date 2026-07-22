@@ -557,4 +557,56 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Note: showChauffeurStep(2) is called by the service gate when the user picks CHAUFFEUR
+
+  // Mobile time dropdowns (hour + minute) using Choices.js
+  function initChauffeurTimeMobileParts() {
+    const hourSel = document.getElementById("chauffeur_time_hour");
+    const minSel = document.getElementById("chauffeur_time_minute");
+    const flatpickrInput = document.querySelector('input[data-picker="chauffeur-time"]');
+    if (!hourSel || !minSel || !window.Choices) return false;
+    if (hourSel.closest(".choices") && minSel.closest(".choices")) return true;
+
+    if (!hourSel.closest(".choices")) {
+      new Choices(hourSel, {
+        searchEnabled: false,
+        shouldSort: false,
+        itemSelectText: "",
+        placeholderValue: "Hour",
+        allowHTML: false,
+        position: "bottom"
+      });
+    }
+    if (!minSel.closest(".choices")) {
+      new Choices(minSel, {
+        searchEnabled: false,
+        shouldSort: false,
+        itemSelectText: "",
+        placeholderValue: "Min",
+        allowHTML: false,
+        position: "bottom"
+      });
+    }
+
+    function syncTime() {
+      if (!flatpickrInput) return;
+      const h = hourSel.value;
+      const m = minSel.value;
+      if (h && m) {
+        flatpickrInput.value = h + ":" + m;
+        flatpickrInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+
+    hourSel.addEventListener("change", syncTime);
+    minSel.addEventListener("change", syncTime);
+
+    return true;
+  }
+
+  if (!initChauffeurTimeMobileParts()) {
+    let tries = 0;
+    const interval = setInterval(() => {
+      if (initChauffeurTimeMobileParts() || ++tries > 20) clearInterval(interval);
+    }, 200);
+  }
 });
