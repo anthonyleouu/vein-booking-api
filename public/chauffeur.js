@@ -156,6 +156,26 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // Sync mobile time selects with the flatpickr time input
+  const chauffeurRoot = document.querySelector('.chauffeur_flow');
+  const hourSelect = chauffeurRoot?.querySelector('#chauffeur_time_hour');
+  const minuteSelect = chauffeurRoot?.querySelector('#chauffeur_time_minute');
+  const timeInputEl = chauffeurRoot?.querySelector('input[data-picker="chauffeur-time"]');
+
+  function syncMobileTimeToFlatpickr() {
+    if (!hourSelect || !minuteSelect || !timeInputEl) return;
+    const h = hourSelect.value;
+    const m = minuteSelect.value;
+    if (h && m) {
+      timeInputEl.value = `${h}:${m}`;
+      // Fire change event so flatpickr's state updates
+      timeInputEl.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  if (hourSelect) hourSelect.addEventListener("change", syncMobileTimeToFlatpickr);
+  if (minuteSelect) minuteSelect.addEventListener("change", syncMobileTimeToFlatpickr);
+
   // =========================
   // GOOGLE PLACES (pickup only)
   // =========================
