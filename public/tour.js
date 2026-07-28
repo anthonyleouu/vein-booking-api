@@ -1126,4 +1126,57 @@ document.addEventListener("DOMContentLoaded", function () {
     wireTourStepIndicatorClicks();
     console.log("TOUR STEP HANDLERS ATTACHED");
   }, 300);
+
+  // Mobile time dropdowns (hour + minute) using Choices.js
+  function initTourTimeMobileParts() {
+    const tourRoot = document.querySelector('.tour_flow');
+    const hourSel = tourRoot?.querySelector('#tour_time_hour') || document.getElementById("tour_time_hour");
+    const minSel = tourRoot?.querySelector('#tour_time_minute') || document.getElementById("tour_time_minute");
+    const flatpickrInput = tourRoot?.querySelector('input[data-picker="time"]') || document.querySelector('.tour_flow input[data-picker="time"]');
+    if (!hourSel || !minSel || !window.Choices) return false;
+    if (hourSel.closest(".choices") && minSel.closest(".choices")) return true;
+
+    if (!hourSel.closest(".choices")) {
+      new Choices(hourSel, {
+        searchEnabled: false,
+        shouldSort: false,
+        itemSelectText: "",
+        placeholderValue: "Hour",
+        allowHTML: false,
+        position: "bottom"
+      });
+    }
+    if (!minSel.closest(".choices")) {
+      new Choices(minSel, {
+        searchEnabled: false,
+        shouldSort: false,
+        itemSelectText: "",
+        placeholderValue: "Min",
+        allowHTML: false,
+        position: "bottom"
+      });
+    }
+
+    function syncTime() {
+      if (!flatpickrInput) return;
+      const h = hourSel.value;
+      const m = minSel.value;
+      if (h && m) {
+        flatpickrInput.value = h + ":" + m;
+        flatpickrInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+
+    hourSel.addEventListener("change", syncTime);
+    minSel.addEventListener("change", syncTime);
+
+    return true;
+  }
+
+  if (!initTourTimeMobileParts()) {
+    let tries = 0;
+    const interval = setInterval(() => {
+      if (initTourTimeMobileParts() || ++tries > 20) clearInterval(interval);
+    }, 200);
+  }
 });
